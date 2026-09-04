@@ -1,0 +1,17 @@
+# Claude / Cursor — questshift-engine
+
+Read `AGENTS.md` first (this repo), then the docs-repo map.
+
+- GitHub: https://github.com/NA-FSI-Services/questshift/blob/main/AGENTS.md
+- Local: `/Users/dtorresf/Documents/GitHub/na-fsi-services/questshift/questshift/AGENTS.md`
+
+## Hard rules (v1 freeze)
+
+- Quarkus 3 + Java 21, package `io.questshift`. No native image.
+- vLLM only (Granite 3.1 8B Instruct). `%dev` keeps LLM **disabled**. No Ollama.
+- Campaign YAML wins. LLM narrates only. Fallback to YAML if vLLM is down.
+- Never execute player `oc` / Ansible / Linux / Java against the cluster.
+- One party per process. Seats are cosmetic.
+- Match existing REST/WebSocket; do not invent endpoints.
+- v1 non-goals: TTS, multi-party, real command execution.
+- Never commit API keys. `questshift.llm.api-key` stays `none` in git.

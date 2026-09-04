@@ -1,0 +1,15 @@
+---
+description: Java / Quarkus conventions for questshift-engine
+globs: "**/*.{java,xml,properties}"
+alwaysApply: false
+---
+
+# Java / Quarkus
+
+- Java 21, Quarkus 3, package `io.questshift`. Public JSON fields stay camelCase on session beans.
+- Campaign YAML snake_case maps via `@JsonProperty` on `Campaign.Room` only.
+- `CommandEvaluator` order: empty → loot → forbidden → regex/examples → soft match. Do not execute the command.
+- `LLMService` must keep room `expectedCommandPattern` after parse; `%dev`/`%test` keep `questshift.llm.enabled=false`.
+- No native-image flags, no Ollama URLs, no extra JAX-RS paths beyond `GameResource` / `GameSocket`.
+- Committed `questshift.llm.api-key` stays `none`. Do not check in `.env` or `application-local.properties`.
+- Tests: JUnit 5 next to the class (`CommandEvaluatorTest`, `StateSerializerTest`).

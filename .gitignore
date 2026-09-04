@@ -1,3 +1,12 @@
+# Local secrets — never commit Hugging Face tokens or LLM API keys
+.env
+.env.*
+application-local.properties
+application-secret.properties
+*.pem
+id_rsa
+id_ed25519
+
 # Compiled class file
 *.class
 
