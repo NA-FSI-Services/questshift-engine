@@ -1,6 +1,10 @@
 # Compiled class file
 *.class
 
+target/
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
 # Log file
 *.log
 

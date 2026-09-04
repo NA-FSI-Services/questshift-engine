@@ -1,0 +1,84 @@
+package io.questshift.api;
+
+import io.questshift.campaign.Campaign;
+import io.questshift.campaign.CampaignLibrary;
+import io.questshift.session.GameSession;
+import io.questshift.session.SessionService;
+import io.questshift.session.SessionService.CommandResult;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import java.util.Collection;
+import java.util.List;
+
+@Path("/api")
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+public class GameResource {
+
+    @Inject
+    SessionService sessions;
+
+    @Inject
+    CampaignLibrary campaigns;
+
+    @GET
+    @Path("/campaigns")
+    public Collection<Campaign> listCampaigns() {
+        return campaigns.all();
+    }
+
+    @POST
+    @Path("/sessions")
+    public GameSession start(StartRequest request) {
+        StartRequest body = request == null ? new StartRequest() : request;
+        return sessions.start(body.campaignId, body.party);
+    }
+
+    @GET
+    @Path("/sessions/{id}")
+    public GameSession get(@PathParam("id") String id) {
+        return sessions.get(id);
+    }
+
+    @POST
+    @Path("/sessions/{id}/commands")
+    public CommandResult command(@PathParam("id") String id, CommandRequest request) {
+        CommandRequest body = request == null ? new CommandRequest() : request;
+        return sessions.submit(id, body.command, body.seatId);
+    }
+
+    @GET
+    @Path("/sessions/{id}/export")
+    @Produces({"application/yaml", MediaType.APPLICATION_JSON, MediaType.TEXT_PLAIN})
+    public Response export(@PathParam("id") String id, @QueryParam("format") String format) {
+        String chosen = format == null ? "yaml" : format;
+        String body = sessions.export(id, chosen);
+        String media = chosen.toLowerCase().contains("json") ? MediaType.APPLICATION_JSON : "application/yaml";
+        return Response.ok(body).type(media).build();
+    }
+
+    @POST
+    @Path("/sessions/import")
+    @Consumes({MediaType.APPLICATION_JSON, "application/yaml", MediaType.TEXT_PLAIN, MediaType.WILDCARD})
+    public GameSession restore(String body, @QueryParam("format") String format) {
+        return sessions.restoreRaw(body, format);
+    }
+
+    public static class StartRequest {
+        public String campaignId;
+        public List<GameSession.PartyMember> party;
+    }
+
+    public static class CommandRequest {
+        public String command;
+        public String seatId;
+    }
+}
