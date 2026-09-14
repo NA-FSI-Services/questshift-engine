@@ -1,7 +1,7 @@
 # Local pre-commit overrides. Copy to .githooks/config (gitignored).
 #   cp .githooks/config.example .githooks/config
 
-# Skip the hook for this shell (same effect as git commit --no-verify).
+# Skip lint/coverage for this shell. Secret scan still runs.
 # SKIP_QUESTSHIFT_HOOKS=1
 
 # Extra Maven flags for ./mvnw -Ppre-commit verify
