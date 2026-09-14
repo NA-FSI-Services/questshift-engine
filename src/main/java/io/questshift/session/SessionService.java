@@ -10,6 +10,7 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,35 +20,33 @@ public class SessionService {
 
     private final Map<String, GameSession> sessions = new ConcurrentHashMap<>();
 
-    @Inject
-    CampaignLibrary campaigns;
+    @Inject CampaignLibrary campaigns;
 
-    @Inject
-    CommandEvaluator evaluator;
+    @Inject CommandEvaluator evaluator;
 
-    @Inject
-    LLMService llm;
+    @Inject LLMService llm;
 
-    @Inject
-    StateSerializer serializer;
+    @Inject StateSerializer serializer;
 
     public GameSession start(String campaignId, List<GameSession.PartyMember> party) {
-        Campaign campaign = campaignId == null || campaignId.isBlank()
-                ? campaigns.defaultCampaign()
-                : campaigns.require(campaignId);
+        Campaign campaign =
+                campaignId == null || campaignId.isBlank()
+                        ? campaigns.defaultCampaign()
+                        : campaigns.require(campaignId);
         Campaign.Room first = campaign.firstRoom();
         GameSession session = new GameSession();
         session.id = UUID.randomUUID().toString();
         session.campaignId = campaign.metadata.id;
         session.startedAt = Instant.now();
         session.currentRoomId = first.id;
-        session.partyMembers = party == null || party.isEmpty()
-                ? List.of(
-                        new GameSession.PartyMember("Facilitator", "guardian"),
-                        new GameSession.PartyMember("Player 2", "automancer"),
-                        new GameSession.PartyMember("Player 3", "ranger"),
-                        new GameSession.PartyMember("Player 4", "artificer"))
-                : party;
+        session.partyMembers =
+                party == null || party.isEmpty()
+                        ? List.of(
+                                new GameSession.PartyMember("Facilitator", "guardian"),
+                                new GameSession.PartyMember("Player 2", "automancer"),
+                                new GameSession.PartyMember("Player 3", "ranger"),
+                                new GameSession.PartyMember("Player 4", "artificer"))
+                        : party;
         campaign.rooms.forEach(room -> session.puzzleCompletion.put(room.id, false));
         GameMasterTurn turn = llm.narrate(campaign, session, first, campaign.story.opening);
         applyTurn(session, turn);
@@ -77,18 +76,20 @@ public class SessionService {
         if (evaluation.passed()) {
             session.puzzleCompletion.put(room.id, true);
             if (room.loot != null) {
-                room.loot.forEach(loot -> {
-                    if (!session.inventory.contains(loot.id)) {
-                        session.inventory.add(loot.id);
-                    }
-                });
+                room.loot.forEach(
+                        loot -> {
+                            if (!session.inventory.contains(loot.id)) {
+                                session.inventory.add(loot.id);
+                            }
+                        });
             }
             if (room.skillsGranted != null) {
-                room.skillsGranted.forEach(skill -> {
-                    if (!session.skills.contains(skill)) {
-                        session.skills.add(skill);
-                    }
-                });
+                room.skillsGranted.forEach(
+                        skill -> {
+                            if (!session.skills.contains(skill)) {
+                                session.skills.add(skill);
+                            }
+                        });
             }
             session.lastCanvasEvent = room.canvasEvent;
             Campaign.Room next = campaign.nextRoom(room.id);
@@ -106,8 +107,14 @@ public class SessionService {
             return result;
         }
         session.hintCount++;
-        GameMasterTurn miss = llm.narrate(campaign, session, room,
-                "The party tried: " + command + ". It failed. Offer a short miss beat, then the hint if they are stuck.");
+        GameMasterTurn miss =
+                llm.narrate(
+                        campaign,
+                        session,
+                        room,
+                        "The party tried: "
+                                + command
+                                + ". It failed. Offer a short miss beat, then the hint if they are stuck.");
         applyTurn(session, miss);
         result.session = session;
         return result;
@@ -124,7 +131,7 @@ public class SessionService {
 
     public String export(String sessionId, String format) {
         GameSession session = get(sessionId);
-        if (format != null && format.toLowerCase().contains("json")) {
+        if (format != null && format.toLowerCase(Locale.ROOT).contains("json")) {
             return serializer.toJson(session);
         }
         return serializer.toYaml(session);

@@ -16,11 +16,8 @@ Java 21 and Maven 3.9+.
 
 ```bash
 # from questshift-engine, with questshift-campaigns as a sibling
-export QUESTSHIFT_CAMPAIGNS_DIR=../questshift-campaigns/campaigns
 ./mvnw quarkus:dev
 ```
-
-If you do not have the wrapper yet: `mvn quarkus:dev`.
 
 Dev UI: http://localhost:8080/q/swagger-ui
 
@@ -32,6 +29,28 @@ questshift.llm.model=ibm-granite/granite-3.1-8b-instruct
 ```
 
 If vLLM is down, narration falls back to the authored campaign YAML so a dry run still works.
+
+## Quality gates
+
+```bash
+./mvnw spotless:apply   # Google Java Format (AOSP)
+./mvnw test             # unit + @QuarkusTest (surefire); Phase 1 hour proof lives here
+./mvnw verify           # also failsafe *IT, Spotless check, PMD (priority ≤ 3, 0 allowed), JaCoCo ≥ 80% lines / 70% branches
+```
+
+PMD rules: `pmd/ruleset.xml`. Coverage report: `target/jacoco-report/index.html`.
+
+### Pre-commit hook
+
+Once per clone (repo-local `core.hooksPath`, not global):
+
+```bash
+./.githooks/install
+```
+
+That runs Spotless, unit/`@QuarkusTest`, PMD, and JaCoCo on commit when Java/Maven files are staged. Integration tests stay on `./mvnw verify`. Local knobs: `.githooks/config` (from `config.example`). Bypass: `SKIP_QUESTSHIFT_HOOKS=1` or `git commit --no-verify`.
+
+PRs into `main` run the same `./mvnw verify` gate in GitHub Actions (workflow **Quality** / job **Format, PMD, coverage**). Mark that check required on `main` so a red run cannot merge.
 
 ## API
 

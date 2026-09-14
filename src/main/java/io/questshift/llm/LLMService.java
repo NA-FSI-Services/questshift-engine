@@ -17,12 +17,11 @@ import java.util.List;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-/**
- * OpenAI-compatible client aimed at vLLM serving Granite 3.1 8B Instruct.
- */
+/** OpenAI-compatible client aimed at vLLM serving Granite 3.1 8B Instruct. */
 @ApplicationScoped
 public class LLMService {
 
+    private static final int HTTP_ERROR_STATUS = 300;
     private static final Logger LOG = Logger.getLogger(LLMService.class);
 
     @ConfigProperty(name = "questshift.llm.base-url")
@@ -40,34 +39,41 @@ public class LLMService {
     @ConfigProperty(name = "questshift.llm.timeout-seconds", defaultValue = "45")
     int timeoutSeconds;
 
-    @Inject
-    ObjectMapper mapper;
+    @Inject ObjectMapper mapper;
 
     private final HttpClient http = HttpClient.newBuilder().build();
 
-    public GameMasterTurn narrate(Campaign campaign, GameSession session, Campaign.Room room, String extra) {
+    public GameMasterTurn narrate(
+            Campaign campaign, GameSession session, Campaign.Room room, String extra) {
         GameMasterTurn fallback = fallbackTurn(room, extra);
         if (!enabled) {
             return fallback;
         }
         try {
-            String body = mapper.writeValueAsString(new ChatRequest(
-                    model,
-                    List.of(
-                            new ChatMessage("system", campaign.gameMaster.systemPrompt),
-                            new ChatMessage("user", userPrompt(campaign, session, room, extra))),
-                    0.4,
-                    700));
-            HttpRequest.Builder builder = HttpRequest.newBuilder()
-                    .uri(URI.create(trimSlash(baseUrl) + "/chat/completions"))
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(body));
+            String body =
+                    mapper.writeValueAsString(
+                            new ChatRequest(
+                                    model,
+                                    List.of(
+                                            new ChatMessage(
+                                                    "system", campaign.gameMaster.systemPrompt),
+                                            new ChatMessage(
+                                                    "user",
+                                                    userPrompt(campaign, session, room, extra))),
+                                    0.4,
+                                    700));
+            HttpRequest.Builder builder =
+                    HttpRequest.newBuilder()
+                            .uri(URI.create(trimSlash(baseUrl) + "/chat/completions"))
+                            .timeout(Duration.ofSeconds(timeoutSeconds))
+                            .header("Content-Type", "application/json")
+                            .POST(HttpRequest.BodyPublishers.ofString(body));
             if (apiKey != null && !apiKey.isBlank() && !"none".equals(apiKey)) {
                 builder.header("Authorization", "Bearer " + apiKey);
             }
-            HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() >= 300) {
+            HttpResponse<String> response =
+                    http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= HTTP_ERROR_STATUS) {
                 LOG.warnf("vLLM HTTP %d: %s", response.statusCode(), response.body());
                 return fallback;
             }
@@ -105,7 +111,8 @@ public class LLMService {
 
     private GameMasterTurn fallbackTurn(Campaign.Room room, String extra) {
         GameMasterTurn turn = new GameMasterTurn();
-        turn.narrative = extra == null || extra.isBlank() ? room.narrative : extra + "\n\n" + room.narrative;
+        turn.narrative =
+                extra == null || extra.isBlank() ? room.narrative : extra + "\n\n" + room.narrative;
         turn.puzzleType = room.puzzleType;
         turn.expectedCommandPattern = room.expectedCommandPattern;
         turn.hint = room.hint;
@@ -113,7 +120,8 @@ public class LLMService {
         return turn;
     }
 
-    private String userPrompt(Campaign campaign, GameSession session, Campaign.Room room, String extra) {
+    private String userPrompt(
+            Campaign campaign, GameSession session, Campaign.Room room, String extra) {
         return """
                 Campaign: %s
                 Elapsed seconds: %d
@@ -127,19 +135,20 @@ public class LLMService {
 
                 Return JSON only:
                 {"narrative":"...","puzzle_type":"%s","expected_command_pattern":"%s","hint":"...","canvas_event":"focus_room"}
-                """.formatted(
-                campaign.metadata.title,
-                session.elapsedSeconds,
-                room.title,
-                room.id,
-                room.puzzleType,
-                room.prompt,
-                room.narrative,
-                room.expectedCommandPattern,
-                session.inventory,
-                extra == null ? "" : extra,
-                room.puzzleType,
-                room.expectedCommandPattern.replace("\"", "\\\""));
+                """
+                .formatted(
+                        campaign.metadata.title,
+                        session.elapsedSeconds,
+                        room.title,
+                        room.id,
+                        room.puzzleType,
+                        room.prompt,
+                        room.narrative,
+                        room.expectedCommandPattern,
+                        session.inventory,
+                        extra == null ? "" : extra,
+                        room.puzzleType,
+                        room.expectedCommandPattern.replace("\"", "\\\""));
     }
 
     private static String extractJson(String content) {
@@ -162,7 +171,9 @@ public class LLMService {
 
     private static String text(JsonNode node, String field, String fallback) {
         JsonNode value = node.get(field);
-        return value == null || value.isNull() || value.asText().isBlank() ? fallback : value.asText();
+        return value == null || value.isNull() || value.asText().isBlank()
+                ? fallback
+                : value.asText();
     }
 
     private static String trimSlash(String url) {
@@ -177,12 +188,13 @@ public class LLMService {
         public String canvasEvent;
     }
 
-    public record ChatMessage(String role, String content) {
-    }
+    public record ChatMessage(String role, String content) {}
 
-    public record ChatRequest(String model, List<ChatMessage> messages, double temperature,
-                              @JsonProperty("max_tokens") int maxTokens) {
-    }
+    public record ChatRequest(
+            String model,
+            List<ChatMessage> messages,
+            double temperature,
+            @JsonProperty("max_tokens") int maxTokens) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ChatResponse {

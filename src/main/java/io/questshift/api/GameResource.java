@@ -17,17 +17,16 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 
 @Path("/api")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class GameResource {
 
-    @Inject
-    SessionService sessions;
+    @Inject SessionService sessions;
 
-    @Inject
-    CampaignLibrary campaigns;
+    @Inject CampaignLibrary campaigns;
 
     @GET
     @Path("/campaigns")
@@ -61,13 +60,21 @@ public class GameResource {
     public Response export(@PathParam("id") String id, @QueryParam("format") String format) {
         String chosen = format == null ? "yaml" : format;
         String body = sessions.export(id, chosen);
-        String media = chosen.toLowerCase().contains("json") ? MediaType.APPLICATION_JSON : "application/yaml";
+        String media =
+                chosen.toLowerCase(Locale.ROOT).contains("json")
+                        ? MediaType.APPLICATION_JSON
+                        : "application/yaml";
         return Response.ok(body).type(media).build();
     }
 
     @POST
     @Path("/sessions/import")
-    @Consumes({MediaType.APPLICATION_JSON, "application/yaml", MediaType.TEXT_PLAIN, MediaType.WILDCARD})
+    @Consumes({
+        MediaType.APPLICATION_JSON,
+        "application/yaml",
+        MediaType.TEXT_PLAIN,
+        MediaType.WILDCARD
+    })
     public GameSession restore(String body, @QueryParam("format") String format) {
         return sessions.restoreRaw(body, format);
     }

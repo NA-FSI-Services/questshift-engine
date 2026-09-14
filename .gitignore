@@ -3,6 +3,9 @@
 .env.*
 application-local.properties
 application-secret.properties
+
+# Local pre-commit overrides (copy from .githooks/config.example)
+.githooks/config
 *.pem
 id_rsa
 id_ed25519

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Spotless (lint/format), PMD, unit/@QuarkusTest, JaCoCo 80% line / 70% branch.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+CONFIG="$ROOT/.githooks/config"
+if [[ -f "$CONFIG" ]]; then
+    # shellcheck disable=SC1090
+    source "$CONFIG"
+fi
+
+if [[ "${SKIP_QUESTSHIFT_HOOKS:-}" == "1" ]]; then
+    echo "questshift-engine pre-commit: skipped (SKIP_QUESTSHIFT_HOOKS=1)"
+    exit 0
+fi
+
+if ! git diff --cached --name-only --diff-filter=ACMR | grep -Eq '\.(java|xml|properties)$|^pom\.xml$|^pmd/|^\.githooks/'; then
+    exit 0
+fi
+
+echo "questshift-engine pre-commit: Spotless, tests, PMD, JaCoCo (skip ITs)"
+rm -f "$ROOT/target/jacoco-quarkus.exec"
+# shellcheck disable=SC2086
+./mvnw -B ${HOOK_MAVEN_ARGS:-} -Ppre-commit verify

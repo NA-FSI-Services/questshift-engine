@@ -26,7 +26,8 @@ public class CommandEvaluator {
         if (matchesAny(room.forbiddenPatterns, command)) {
             return Evaluation.fail("The dungeon knows that trick. It is the cursed form.");
         }
-        if (matchesPattern(room.expectedCommandPattern, command) || matchesExample(room.acceptedExamples, command)) {
+        if (matchesPattern(room.expectedCommandPattern, command)
+                || matchesExample(room.acceptedExamples, command)) {
             return Evaluation.pass("The dungeon accepts the command.");
         }
         if (softMatch(room.puzzleType, command)) {
@@ -70,14 +71,23 @@ public class CommandEvaluator {
         }
         return switch (puzzleType) {
             case "linux" -> c.contains("grep") && c.contains("rune") && c.contains("awk");
-            case "ansible" -> c.contains("hosts:") && c.contains("dungeon")
-                    && c.contains("gather_facts") && c.contains("/etc/questshift/name")
-                    && c.contains("name:");
-            case "openshift" -> (c.contains("oc ") || c.contains("kubectl "))
-                    && (c.contains("set probe") && c.contains("/healthz") && c.contains("dungeon")
-                    || c.contains("annotate") && c.contains("thorn-ash-oak-iron"));
-            case "java" -> c.contains("@path(\"/hello\")") && c.contains("@get")
-                    && c.contains("questshift lives") && !c.contains("greeting.touppercase");
+            case "ansible" ->
+                    c.contains("hosts:")
+                            && c.contains("dungeon")
+                            && c.contains("gather_facts")
+                            && c.contains("/etc/questshift/name")
+                            && c.contains("name:");
+            case "openshift" ->
+                    (c.contains("oc ") || c.contains("kubectl "))
+                            && (c.contains("set probe")
+                                            && c.contains("/healthz")
+                                            && c.contains("dungeon")
+                                    || c.contains("annotate") && c.contains("thorn-ash-oak-iron"));
+            case "java" ->
+                    c.contains("@path(\"/hello\")")
+                            && c.contains("@get")
+                            && c.contains("questshift lives")
+                            && !c.contains("greeting.touppercase");
             default -> false;
         };
     }

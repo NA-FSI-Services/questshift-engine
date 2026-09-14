@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -19,6 +20,7 @@ public class CampaignLibrary {
     private static final Logger LOG = Logger.getLogger(CampaignLibrary.class);
     private final ObjectMapper yaml = new ObjectMapper(new YAMLFactory());
     private final Map<String, Campaign> campaigns = new ConcurrentHashMap<>();
+    private final ReentrantLock loadLock = new ReentrantLock();
 
     @ConfigProperty(name = "questshift.campaigns.dir")
     String campaignsDir;
@@ -44,23 +46,34 @@ public class CampaignLibrary {
         return campaigns.values();
     }
 
-    private synchronized void loadIfEmpty() {
+    private void loadIfEmpty() {
         if (!campaigns.isEmpty()) {
             return;
         }
-        Path dir = Path.of(campaignsDir);
-        if (Files.isDirectory(dir)) {
-            try (var stream = Files.list(dir)) {
-                stream.filter(p -> p.toString().endsWith(".yaml") || p.toString().endsWith(".yml"))
-                        .forEach(this::loadFile);
-            } catch (IOException e) {
-                LOG.warn("Could not list campaign dir " + dir, e);
+        loadLock.lock();
+        try {
+            if (!campaigns.isEmpty()) {
+                return;
             }
+            Path dir = Path.of(campaignsDir);
+            if (Files.isDirectory(dir)) {
+                try (var stream = Files.list(dir)) {
+                    stream.filter(
+                                    p ->
+                                            p.toString().endsWith(".yaml")
+                                                    || p.toString().endsWith(".yml"))
+                            .forEach(this::loadFile);
+                } catch (IOException e) {
+                    LOG.warn("Could not list campaign dir " + dir, e);
+                }
+            }
+            if (campaigns.isEmpty()) {
+                loadClasspath("campaigns/campaign-devops-dungeon.yaml");
+            }
+            LOG.infof("Loaded %d campaign(s)", campaigns.size());
+        } finally {
+            loadLock.unlock();
         }
-        if (campaigns.isEmpty()) {
-            loadClasspath("campaigns/campaign-devops-dungeon.yaml");
-        }
-        LOG.infof("Loaded %d campaign(s)", campaigns.size());
     }
 
     private void loadFile(Path path) {
@@ -73,7 +86,8 @@ public class CampaignLibrary {
     }
 
     private void loadClasspath(String resource) {
-        try (InputStream in = Thread.currentThread().getContextClassLoader().getResourceAsStream(resource)) {
+        try (InputStream in =
+                Thread.currentThread().getContextClassLoader().getResourceAsStream(resource)) {
             if (in == null) {
                 LOG.error("Missing classpath campaign " + resource);
                 return;

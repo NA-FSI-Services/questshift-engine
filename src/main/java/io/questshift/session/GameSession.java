@@ -6,9 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * Live campaign state. Serialized to YAML/JSON for export and cluster restart restore.
- */
+/** Live campaign state. Serialized to YAML/JSON for export and cluster restart restore. */
 public class GameSession {
 
     public String id;
@@ -30,8 +28,7 @@ public class GameSession {
         public String name;
         public String seatId;
 
-        public PartyMember() {
-        }
+        public PartyMember() {}
 
         public PartyMember(String name, String seatId) {
             this.name = name;

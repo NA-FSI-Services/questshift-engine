@@ -12,6 +12,7 @@ public class Campaign {
     public List<Seat> seats = new ArrayList<>();
     public Story story = new Story();
     public List<Room> rooms = new ArrayList<>();
+
     @JsonProperty("game_master")
     public GameMaster gameMaster = new GameMaster();
 
@@ -47,25 +48,36 @@ public class Campaign {
         public String title;
         public int mapX;
         public int mapY;
+
         @JsonProperty("puzzle_type")
         public String puzzleType;
+
         public int estimatedMinutes;
         public String narrative;
         public String prompt;
+
         @JsonProperty("expected_command_pattern")
         public String expectedCommandPattern;
+
         @JsonProperty("forbidden_patterns")
         public List<String> forbiddenPatterns = new ArrayList<>();
+
         public String hint;
+
         @JsonProperty("success_narrative")
         public String successNarrative;
+
         public List<Loot> loot = new ArrayList<>();
+
         @JsonProperty("canvas_event")
         public String canvasEvent;
+
         @JsonProperty("skills_granted")
         public List<String> skillsGranted = new ArrayList<>();
+
         @JsonProperty("requires_loot")
         public List<String> requiresLoot = new ArrayList<>();
+
         @JsonProperty("accepted_examples")
         public List<String> acceptedExamples = new ArrayList<>();
     }
@@ -81,6 +93,7 @@ public class Campaign {
     public static class GameMaster {
         @JsonProperty("system_prompt")
         public String systemPrompt;
+
         @JsonProperty("output_schema")
         public Object outputSchema;
     }
@@ -98,9 +111,6 @@ public class Campaign {
         if (current == null) {
             return firstRoom();
         }
-        return rooms.stream()
-                .filter(r -> r.order == current.order + 1)
-                .findFirst()
-                .orElse(null);
+        return rooms.stream().filter(r -> r.order == current.order + 1).findFirst().orElse(null);
     }
 }

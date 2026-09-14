@@ -9,13 +9,17 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Locale;
 
 @ApplicationScoped
 public class StateSerializer {
 
     private final ObjectMapper json = configure(new ObjectMapper());
-    private final ObjectMapper yaml = configure(new ObjectMapper(
-            new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)));
+    private final ObjectMapper yaml =
+            configure(
+                    new ObjectMapper(
+                            new YAMLFactory()
+                                    .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)));
 
     private static ObjectMapper configure(ObjectMapper mapper) {
         mapper.registerModule(new JavaTimeModule());
@@ -77,7 +81,7 @@ public class StateSerializer {
     }
 
     public GameSession from(String body, String format) {
-        if (format != null && format.toLowerCase().contains("yaml")) {
+        if (format != null && format.toLowerCase(Locale.ROOT).contains("yaml")) {
             return fromYaml(body);
         }
         if (body != null && (body.startsWith("---") || looksLikeYaml(body))) {
