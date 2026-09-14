@@ -50,7 +50,7 @@ Once per clone (repo-local `core.hooksPath`, not global):
 
 That runs Spotless, unit/`@QuarkusTest`, PMD, and JaCoCo on commit when Java/Maven files are staged. Integration tests stay on `./mvnw verify`. Local knobs: `.githooks/config` (from `config.example`). Bypass: `SKIP_QUESTSHIFT_HOOKS=1` or `git commit --no-verify`.
 
-PRs into `main` run the same `./mvnw verify` gate in GitHub Actions (workflow **Quality** / job **Format, PMD, coverage**). Mark that check required on `main` so a red run cannot merge.
+PRs into `main` run the same `./mvnw verify` gate in GitHub Actions (workflow **Quality** / job **Format, PMD, coverage**). Mark that check required on `main` so a red run cannot merge. Dependabot opens weekly GitHub Actions update PRs (`.github/dependabot.yml`).
 
 ## API
 

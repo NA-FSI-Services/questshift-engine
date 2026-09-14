@@ -26,4 +26,4 @@ Quarkus 3.39 / Java 21. Package `io.questshift.{api,campaign,engine,llm,session}
 - Keep committed `questshift.llm.api-key=none`. Put a real key only in untracked `application-local.properties` or the cluster, never in git.
 - Run: `./mvnw quarkus:dev`, `./mvnw test` (unit + `@QuarkusTest`), `./mvnw verify` (Spotless, PMD, integration tests, JaCoCo 80% line / 70% branch).
 - Pre-commit: `./.githooks/install` (sets local `core.hooksPath`). Hook runs `./mvnw -Ppre-commit verify` (Spotless, tests, PMD, JaCoCo; skips ITs). Overrides in gitignored `.githooks/config`.
-- CI: `.github/workflows/quality.yml` runs `./mvnw verify` on PRs and pushes to `main` (Spotless, PMD, tests + ITs, JaCoCo 80/70).
+- CI: `.github/workflows/quality.yml` runs `./mvnw verify` on PRs and pushes to `main` (Spotless, PMD, tests + ITs, JaCoCo 80/70). Dependabot: `.github/dependabot.yml` (weekly GitHub Actions).
