@@ -21,14 +21,16 @@ Java 21 and Maven 3.9+.
 
 Dev UI: http://localhost:8080/q/swagger-ui
 
-Point the LLM at a reachable vLLM:
+Point the LLM at a reachable **vLLM** (workshop freeze: Granite 3.1 8B Instruct):
 
 ```properties
 questshift.llm.base-url=http://vllm.example:8000/v1
 questshift.llm.model=ibm-granite/granite-3.1-8b-instruct
 ```
 
-If vLLM is down, narration falls back to the authored campaign YAML so a dry run still works.
+Do not put a real API key or a private URL in git. Copy `application-local.properties.example` to gitignored `application-local.properties` and set `%dev.questshift.llm.*` there. `./mvnw quarkus:dev` then loads that overlay; `./mvnw test` stays on `%test` with the LLM off.
+
+If the endpoint is down, narration falls back to the authored campaign YAML so a dry run still works. Do not add Ollama.
 
 ## Quality gates
 

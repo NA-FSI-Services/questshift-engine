@@ -5,9 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sun.net.httpserver.HttpServer;
 import io.questshift.campaign.Campaign;
 import io.questshift.session.GameSession;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,6 +28,7 @@ class LLMServiceTest {
         llm.model = "ibm-granite/granite-3.1-8b-instruct";
         llm.apiKey = "none";
         llm.timeoutSeconds = 1;
+        lastAuthorization = null;
         room.narrative = "Authored beat.";
         room.puzzleType = "linux";
         room.expectedCommandPattern = "grep.*rune";
@@ -88,14 +93,58 @@ class LLMServiceTest {
     @Test
     void enabledNarrateFallsBackWhenVllmUnreachable() {
         llm.enabled = true;
-        llm.apiKey = "secret";
-        llm.baseUrl = "http://127.0.0.1:1/v1";
-        Campaign campaign = new Campaign();
-        campaign.metadata.title = "Demo";
-        campaign.gameMaster.systemPrompt = "Stay in the dungeon.";
+        llm.apiKey = "none";
+        llm.baseUrl = "http://localhost:1/v1";
+        Campaign campaign = demoCampaign();
         LLMService.GameMasterTurn turn = llm.narrate(campaign, new GameSession(), room, null);
         assertEquals("Authored beat.", turn.narrative);
         assertEquals("grep.*rune", turn.expectedCommandPattern);
+    }
+
+    @Test
+    void enabledNarrateKeepsYamlRegexWhenGmJsonArrives() throws Exception {
+        String content =
+                "{\"narrative\":\"Live GM\",\"puzzle_type\":\"linux\","
+                        + "\"expected_command_pattern\":\"HACKED\",\"hint\":\"pipes\","
+                        + "\"canvas_event\":\"focus_room\"}";
+        try (AutoCloseable ignored = serveCompletions(200, openaiBody(content))) {
+            llm.enabled = true;
+            llm.apiKey = "none";
+            Campaign campaign = demoCampaign();
+            LLMService.GameMasterTurn turn = llm.narrate(campaign, new GameSession(), room, null);
+            assertEquals("Live GM", turn.narrative);
+            assertEquals("grep.*rune", turn.expectedCommandPattern);
+            assertEquals("pipes", turn.hint);
+        }
+    }
+
+    @Test
+    void enabledNarrateFallsBackOnHttpError() throws Exception {
+        try (AutoCloseable ignored = serveCompletions(503, "{\"error\":\"down\"}")) {
+            llm.enabled = true;
+            llm.apiKey = "none";
+            Campaign campaign = demoCampaign();
+            LLMService.GameMasterTurn turn = llm.narrate(campaign, new GameSession(), room, null);
+            assertEquals("Authored beat.", turn.narrative);
+            assertEquals("grep.*rune", turn.expectedCommandPattern);
+        }
+    }
+
+    @Test
+    void enabledNarrateSendsBearerWhenApiKeyIsSet() throws Exception {
+        String content =
+                "{\"narrative\":\"Keyed GM\",\"puzzle_type\":\"linux\","
+                        + "\"expected_command_pattern\":\"HACKED\",\"hint\":\"pipes\","
+                        + "\"canvas_event\":\"focus_room\"}";
+        try (AutoCloseable ignored = serveCompletions(200, openaiBody(content))) {
+            llm.enabled = true;
+            llm.apiKey = "local-dev-key";
+            Campaign campaign = demoCampaign();
+            LLMService.GameMasterTurn turn = llm.narrate(campaign, new GameSession(), room, null);
+            assertEquals("Keyed GM", turn.narrative);
+            assertEquals("grep.*rune", turn.expectedCommandPattern);
+            assertEquals("Bearer local-dev-key", lastAuthorization);
+        }
     }
 
     @Test
@@ -106,5 +155,38 @@ class LLMServiceTest {
         assertEquals("linux", turn.puzzleType);
         assertEquals("pipe", turn.hint);
         assertEquals("focus_room", turn.canvasEvent);
+    }
+
+    private static Campaign demoCampaign() {
+        Campaign campaign = new Campaign();
+        campaign.metadata.title = "Demo";
+        campaign.gameMaster.systemPrompt = "Stay in the dungeon.";
+        return campaign;
+    }
+
+    private static String openaiBody(String content) throws Exception {
+        return new ObjectMapper()
+                .writeValueAsString(
+                        Map.of("choices", List.of(Map.of("message", Map.of("content", content)))));
+    }
+
+    private String lastAuthorization;
+
+    private AutoCloseable serveCompletions(int status, String body) throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        server.createContext(
+                "/v1/chat/completions",
+                exchange -> {
+                    lastAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
+                    exchange.getRequestBody().readAllBytes();
+                    exchange.getResponseHeaders().add("Content-Type", "application/json");
+                    exchange.sendResponseHeaders(status, bytes.length);
+                    exchange.getResponseBody().write(bytes);
+                    exchange.close();
+                });
+        server.start();
+        llm.baseUrl = "http://localhost:" + server.getAddress().getPort() + "/v1";
+        return () -> server.stop(0);
     }
 }

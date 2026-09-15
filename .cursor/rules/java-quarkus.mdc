@@ -9,7 +9,7 @@ alwaysApply: false
 - Java 21, Quarkus 3, package `io.questshift`. Public JSON fields stay camelCase on session beans.
 - Campaign YAML snake_case maps via `@JsonProperty` on `Campaign.Room` only.
 - `CommandEvaluator` order: empty → loot → forbidden → regex/examples → soft match. Do not execute the command.
-- `LLMService` must keep room `expectedCommandPattern` after parse; `%dev`/`%test` keep `questshift.llm.enabled=false`.
+- `LLMService` must keep room `expectedCommandPattern` after parse. Committed `%dev`/`%test` keep `questshift.llm.enabled=false`. Live local narration uses gitignored `application-local.properties` (`%dev.questshift.llm.*` only).
 - No native-image flags, no Ollama URLs, no extra JAX-RS paths beyond `GameResource` / `GameSocket`.
 - Committed `questshift.llm.api-key` stays `none`. Do not check in `.env` or `application-local.properties`.
 - Tests: `*Test.java` surefire (unit + `@QuarkusTest`). `*IT.java` failsafe (`@QuarkusIntegrationTest`). Format with Spotless; PMD and JaCoCo gates on `./mvnw verify`.
