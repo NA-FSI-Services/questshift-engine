@@ -3,7 +3,7 @@
 Quarkus 3 / Java 21 backend for [QuestShift](https://github.com/NA-FSI-Services/questshift).
 
 - Session + campaign state
-- OpenAI-compatible `LLMService` aimed at vLLM + Granite 3.1 8B Instruct
+- OpenAI-compatible `LLMService` aimed at vLLM + Granite 3.2 8B Instruct
 - `CommandEvaluator` for Linux / Ansible / OpenShift / Java puzzles
 - YAML/JSON export and import via `StateSerializer`
 - REST + WebSocket for the Phaser/React UI
@@ -21,11 +21,11 @@ Java 21 and Maven 3.9+.
 
 Dev UI: http://localhost:8080/q/swagger-ui
 
-Point the LLM at a reachable **vLLM** (workshop freeze: Granite 3.1 8B Instruct):
+Point the LLM at a reachable **vLLM** (workshop freeze: Granite 3.2 8B Instruct):
 
 ```properties
 questshift.llm.base-url=http://vllm.example:8000/v1
-questshift.llm.model=ibm-granite/granite-3.1-8b-instruct
+questshift.llm.model=ibm-granite/granite-3.2-8b-instruct
 ```
 
 Do not put a real API key or a private URL in git. Copy `application-local.properties.example` to gitignored `application-local.properties` and set `%dev.questshift.llm.*` there. `./mvnw quarkus:dev` then loads that overlay; `./mvnw test` stays on `%test` with the LLM off.

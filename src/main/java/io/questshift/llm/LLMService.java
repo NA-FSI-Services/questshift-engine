@@ -17,7 +17,7 @@ import java.util.List;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
-/** OpenAI-compatible client aimed at vLLM serving Granite 3.1 8B Instruct. */
+/** OpenAI-compatible client aimed at vLLM serving Granite 3.2 8B Instruct. */
 @ApplicationScoped
 public class LLMService {
 

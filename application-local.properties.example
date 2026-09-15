@@ -1,13 +1,13 @@
 # Copy to application-local.properties in this directory (gitignored).
-# Do not commit the copy. Committed freeze stays ibm-granite/granite-3.1-8b-instruct
+# Do not commit the copy. Committed freeze stays ibm-granite/granite-3.2-8b-instruct
 # with questshift.llm.api-key=none.
 #
 # Prefix keys with %dev. so ./mvnw quarkus:dev can talk to a live OpenAI-compatible
 # endpoint while %test (./mvnw test / verify) stays YAML-only.
 #
-# Cluster / workshop runtime is still vLLM + Granite 3.1 8B Instruct on NVIDIA L4.
+# Cluster / workshop runtime is still vLLM + Granite 3.2 8B Instruct on NVIDIA L4.
 
 %dev.questshift.llm.enabled=true
 %dev.questshift.llm.base-url=http://127.0.0.1:8000/v1
-%dev.questshift.llm.model=ibm-granite/granite-3.1-8b-instruct
+%dev.questshift.llm.model=ibm-granite/granite-3.2-8b-instruct
 %dev.questshift.llm.api-key=none

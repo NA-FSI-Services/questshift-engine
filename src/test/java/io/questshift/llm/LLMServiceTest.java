@@ -25,7 +25,7 @@ class LLMServiceTest {
         llm.mapper = new ObjectMapper();
         llm.enabled = false;
         llm.baseUrl = "http://example.invalid/v1/";
-        llm.model = "ibm-granite/granite-3.1-8b-instruct";
+        llm.model = "ibm-granite/granite-3.2-8b-instruct";
         llm.apiKey = "none";
         llm.timeoutSeconds = 1;
         lastAuthorization = null;
