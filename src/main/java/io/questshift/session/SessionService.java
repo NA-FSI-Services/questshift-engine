@@ -144,6 +144,7 @@ public class SessionService {
     private void applyTurn(GameSession session, GameMasterTurn turn) {
         session.lastNarrative = turn.narrative;
         session.lastHint = turn.hint;
+        session.yamlFallback = turn.yamlFallback;
         if (turn.canvasEvent != null) {
             session.lastCanvasEvent = turn.canvasEvent;
         }

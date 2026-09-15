@@ -24,6 +24,9 @@ public class GameSession {
     public String lastHint;
     public String lastCanvasEvent;
 
+    /** True when the last GM turn used campaign YAML because vLLM was off or unreachable. */
+    public boolean yamlFallback;
+
     public static class PartyMember {
         public String name;
         public String seatId;

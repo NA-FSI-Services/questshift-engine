@@ -2,6 +2,7 @@ package io.questshift.session;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -17,11 +18,13 @@ class StateSerializerTest {
         session.currentRoomId = "room-01-broken-shell";
         session.inventory.add("rune-thorn");
         session.puzzleCompletion.put("room-01-broken-shell", true);
+        session.yamlFallback = true;
         StateSerializer serializer = new StateSerializer();
         GameSession restored = serializer.fromYaml(serializer.toYaml(session));
         assertEquals("demo", restored.id);
         assertEquals("rune-thorn", restored.inventory.getFirst());
         assertEquals(Boolean.TRUE, restored.puzzleCompletion.get("room-01-broken-shell"));
+        assertTrue(restored.yamlFallback);
     }
 
     @Test

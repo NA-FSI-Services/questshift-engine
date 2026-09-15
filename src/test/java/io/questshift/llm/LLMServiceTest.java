@@ -1,6 +1,7 @@
 package io.questshift.llm;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -44,6 +45,7 @@ class LLMServiceTest {
         assertTrue(turn.narrative.contains("Authored beat."));
         assertEquals("grep.*rune", turn.expectedCommandPattern);
         assertEquals("linux", turn.puzzleType);
+        assertTrue(turn.yamlFallback);
     }
 
     @Test
@@ -60,6 +62,7 @@ class LLMServiceTest {
         assertEquals("grep.*rune", turn.expectedCommandPattern);
         assertEquals("java", turn.puzzleType);
         assertEquals("try pipes", turn.hint);
+        assertFalse(turn.yamlFallback);
     }
 
     @Test
@@ -72,6 +75,7 @@ class LLMServiceTest {
         LLMService.GameMasterTurn turn = llm.parseTurn("not json", room);
         assertEquals("not json", turn.narrative);
         assertEquals("grep.*rune", turn.expectedCommandPattern);
+        assertFalse(turn.yamlFallback);
     }
 
     @Test
@@ -99,6 +103,7 @@ class LLMServiceTest {
         LLMService.GameMasterTurn turn = llm.narrate(campaign, new GameSession(), room, null);
         assertEquals("Authored beat.", turn.narrative);
         assertEquals("grep.*rune", turn.expectedCommandPattern);
+        assertTrue(turn.yamlFallback);
     }
 
     @Test
@@ -115,6 +120,7 @@ class LLMServiceTest {
             assertEquals("Live GM", turn.narrative);
             assertEquals("grep.*rune", turn.expectedCommandPattern);
             assertEquals("pipes", turn.hint);
+            assertFalse(turn.yamlFallback);
         }
     }
 
@@ -127,6 +133,7 @@ class LLMServiceTest {
             LLMService.GameMasterTurn turn = llm.narrate(campaign, new GameSession(), room, null);
             assertEquals("Authored beat.", turn.narrative);
             assertEquals("grep.*rune", turn.expectedCommandPattern);
+            assertTrue(turn.yamlFallback);
         }
     }
 

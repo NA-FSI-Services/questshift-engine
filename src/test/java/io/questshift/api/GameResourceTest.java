@@ -40,6 +40,7 @@ class GameResourceTest {
         assertEquals("active", session.get("status"));
         String narrative = String.valueOf(session.get("lastNarrative"));
         assertTrue(narrative.contains("Torchlight"), narrative);
+        assertEquals(Boolean.TRUE, session.get("yamlFallback"));
         assertNotNull(session.get("id"));
     }
 

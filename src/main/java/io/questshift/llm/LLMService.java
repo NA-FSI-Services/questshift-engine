@@ -41,7 +41,10 @@ public class LLMService {
 
     @Inject ObjectMapper mapper;
 
-    private final HttpClient http = HttpClient.newBuilder().build();
+    // vLLM/uvicorn on OpenShift rejects Java's default HTTP/2 cleartext POSTs
+    // (FastAPI 400: body Field required / input None). HTTP/1.1 matches curl.
+    private final HttpClient http =
+            HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
 
     public GameMasterTurn narrate(
             Campaign campaign, GameSession session, Campaign.Room room, String extra) {
@@ -100,11 +103,13 @@ public class LLMService {
             turn.expectedCommandPattern = room.expectedCommandPattern;
             turn.hint = text(node, "hint", room.hint);
             turn.canvasEvent = text(node, "canvas_event", "focus_room");
+            turn.yamlFallback = false;
             return turn;
         } catch (Exception e) {
             LOG.debug("Could not parse Game Master JSON, wrapping raw text");
             GameMasterTurn turn = fallbackTurn(room, null);
             turn.narrative = content;
+            turn.yamlFallback = false;
             return turn;
         }
     }
@@ -117,6 +122,7 @@ public class LLMService {
         turn.expectedCommandPattern = room.expectedCommandPattern;
         turn.hint = room.hint;
         turn.canvasEvent = "focus_room";
+        turn.yamlFallback = true;
         return turn;
     }
 
@@ -186,6 +192,7 @@ public class LLMService {
         public String expectedCommandPattern;
         public String hint;
         public String canvasEvent;
+        public boolean yamlFallback;
     }
 
     public record ChatMessage(String role, String content) {}
