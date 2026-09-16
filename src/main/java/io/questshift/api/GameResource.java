@@ -75,7 +75,7 @@ public class GameResource {
     @Path("/sessions/{id}/commands")
     public CommandResult command(@PathParam("id") String id, CommandRequest request) {
         CommandRequest body = request == null ? new CommandRequest() : request;
-        return sessions.submit(id, body.command, body.seatId);
+        return sessions.submit(id, body.command, body.seatId, body.name);
     }
 
     @GET
@@ -133,6 +133,7 @@ public class GameResource {
     public static class CommandRequest {
         public String command;
         public String seatId;
+        public String name;
     }
 
     public static class ApiError {

@@ -258,7 +258,43 @@ class GameResourceTest {
                 .then()
                 .statusCode(200)
                 .body("passed", equalTo(false))
-                .body("session.currentRoomId", equalTo("room-01-broken-shell"));
+                .body("session.currentRoomId", equalTo("room-01-broken-shell"))
+                .body("session.commandLog.size()", equalTo(0));
+    }
+
+    @Test
+    void commandLogRecordsAliasAndOutcomeOnTheSession() {
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("id");
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"command\":\"cat /var/log/quest.log\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("passed", equalTo(false))
+                .body("session.commandLog.size()", equalTo(1))
+                .body("session.commandLog[0].name", equalTo("Ada"))
+                .body("session.commandLog[0].seatId", equalTo("guardian"))
+                .body("session.commandLog[0].roomId", equalTo("room-01-broken-shell"))
+                .body("session.commandLog[0].passed", equalTo(false))
+                .body("session.commandLog[0].command", equalTo("cat /var/log/quest.log"));
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"ls\",\"seatId\":\"guardian\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("session.commandLog[1].name", equalTo("Ada"))
+                .body("session.commandLog[1].seatId", equalTo("guardian"));
     }
 
     @Test

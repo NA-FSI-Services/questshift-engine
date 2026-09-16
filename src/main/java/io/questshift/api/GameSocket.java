@@ -27,7 +27,7 @@ public class GameSocket {
     @OnMessage
     public void onMessage(
             String command, Session socket, @PathParam("sessionId") String sessionId) {
-        sessions().submit(sessionId, command, "shared");
+        sessions().submit(sessionId, command, "shared", "");
         send(socket, sessions().export(sessionId, "json"));
     }
 

@@ -27,6 +27,8 @@ public class SessionService {
 
     private static final int MIN_DURATION_MINUTES = 1;
 
+    private static final String SHARED_SEAT = "shared";
+
     private final Map<String, GameSession> sessions = new ConcurrentHashMap<>();
 
     private final Map<String, GameSession> byJoinCode = new ConcurrentHashMap<>();
@@ -109,7 +111,7 @@ public class SessionService {
         return session;
     }
 
-    public CommandResult submit(String sessionId, String command, String seatId) {
+    public CommandResult submit(String sessionId, String command, String seatId, String name) {
         GameSession session = get(sessionId);
         Campaign campaign = campaigns.require(session.campaignId);
         Campaign.Room room = campaign.roomById(session.currentRoomId);
@@ -119,6 +121,7 @@ public class SessionService {
         result.message = evaluation.message();
         result.seatId = seatId;
         result.command = command;
+        recordCommand(session, name, seatId, command, evaluation.passed(), evaluation.message());
         if (evaluation.passed()) {
             session.puzzleCompletion.put(room.id, true);
             if (room.loot != null) {
@@ -176,6 +179,11 @@ public class SessionService {
                 imported.partyMembers = new ArrayList<>();
             } else {
                 imported.partyMembers = new ArrayList<>(imported.partyMembers);
+            }
+            if (imported.commandLog == null) {
+                imported.commandLog = new ArrayList<>();
+            } else {
+                imported.commandLog = new ArrayList<>(imported.commandLog);
             }
             refreshStatus(imported);
             GameSession live = findLiveParty();
@@ -276,6 +284,44 @@ public class SessionService {
             }
         }
         return taken;
+    }
+
+    private void recordCommand(
+            GameSession session,
+            String name,
+            String seatId,
+            String command,
+            boolean passed,
+            String message) {
+        if (command == null || command.isBlank()) {
+            return;
+        }
+        if (session.commandLog == null) {
+            session.commandLog = new ArrayList<>();
+        }
+        GameSession.CommandLogEntry entry = new GameSession.CommandLogEntry();
+        entry.roomId = session.currentRoomId;
+        entry.name = resolveAlias(session, name, seatId);
+        entry.seatId = seatId == null || seatId.isBlank() ? SHARED_SEAT : seatId.trim();
+        entry.command = command;
+        entry.passed = passed;
+        entry.message = message;
+        List<GameSession.CommandLogEntry> log = new ArrayList<>(session.commandLog);
+        log.add(entry);
+        session.commandLog = log;
+    }
+
+    private static String resolveAlias(GameSession session, String name, String seatId) {
+        if (name != null && !name.isBlank()) {
+            return name.trim();
+        }
+        String seat = seatId == null ? "" : seatId.trim();
+        for (GameSession.PartyMember member : session.partyMembers) {
+            if (seat.equals(member.seatId)) {
+                return member.name;
+            }
+        }
+        return SHARED_SEAT;
     }
 
     private void applyTurn(GameSession session, GameMasterTurn turn) {

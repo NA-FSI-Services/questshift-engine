@@ -24,6 +24,7 @@ public class GameSession {
     public String lastNarrative;
     public String lastHint;
     public String lastCanvasEvent;
+    public List<CommandLogEntry> commandLog = new ArrayList<>();
 
     /** True when the last GM turn used campaign YAML because vLLM was off or unreachable. */
     public boolean yamlFallback;
@@ -38,6 +39,18 @@ public class GameSession {
             this.name = name;
             this.seatId = seatId;
         }
+    }
+
+    /** One submitted attempt. Attribution only; seats do not gate scoring. */
+    public static class CommandLogEntry {
+        public String roomId;
+        public String name;
+        public String seatId;
+        public String command;
+        public boolean passed;
+        public String message;
+
+        public CommandLogEntry() {}
     }
 
     public void tickElapsed() {

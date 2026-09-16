@@ -118,9 +118,11 @@ class GameSocketTest {
                         .join();
 
         assertTrue(opened.await(5, TimeUnit.SECONDS), "websocket open snapshot");
-        socket.sendText("", true);
+        socket.sendText("cat /var/log/quest.log", true);
         assertTrue(replied.await(5, TimeUnit.SECONDS), last.get());
         assertTrue(last.get().contains(sessionId), last.get());
         assertTrue(last.get().contains("room-01-broken-shell"), last.get());
+        assertTrue(last.get().contains("commandLog"), last.get());
+        assertTrue(last.get().contains("cat /var/log/quest.log"), last.get());
     }
 }
