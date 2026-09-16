@@ -1,6 +1,8 @@
 package io.questshift.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.test.junit.QuarkusTest;
@@ -124,5 +126,101 @@ class GameSocketTest {
         assertTrue(last.get().contains("room-01-broken-shell"), last.get());
         assertTrue(last.get().contains("commandLog"), last.get());
         assertTrue(last.get().contains("cat /var/log/quest.log"), last.get());
+    }
+
+    @Test
+    void presencePostFansSnapshotToEveryOpenSocket() throws Exception {
+        var started =
+                given().contentType(ContentType.JSON)
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}")
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract();
+        String sessionId = started.path("id");
+        String joinCode = started.path("joinCode");
+        String scoringRoom = started.path("currentRoomId");
+
+        SocketInbox first = openInbox(sessionId);
+        SocketInbox second = openInbox(sessionId);
+        assertTrue(first.opened.await(5, TimeUnit.SECONDS), "first websocket open");
+        assertTrue(second.opened.await(5, TimeUnit.SECONDS), "second websocket open");
+
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Ada\",\"mapX\":200,\"mapY\":276,\"viewedRoomId\":\"\"}")
+                .when()
+                .post("/api/sessions/" + joinCode + "/presence")
+                .then()
+                .statusCode(200)
+                .body("partyMembers[0].mapX", equalTo(200))
+                .body("currentRoomId", equalTo(scoringRoom));
+
+        assertTrue(first.updated.await(5, TimeUnit.SECONDS), first.last.get());
+        assertTrue(second.updated.await(5, TimeUnit.SECONDS), second.last.get());
+        assertTrue(compactJson(first.last.get()).contains("\"mapX\":200"), first.last.get());
+        assertTrue(compactJson(second.last.get()).contains("\"mapX\":200"), second.last.get());
+        assertTrue(first.last.get().contains(scoringRoom), first.last.get());
+        assertTrue(second.last.get().contains(scoringRoom), second.last.get());
+        assertTrue(first.last.get().contains(sessionId), first.last.get());
+
+        first.socket.sendText("cat /var/log/quest.log", true);
+        assertTrue(first.command.await(5, TimeUnit.SECONDS), first.last.get());
+        assertTrue(first.last.get().contains("cat /var/log/quest.log"), first.last.get());
+        assertFalse(
+                second.command.await(400, TimeUnit.MILLISECONDS),
+                "command frames stay on the sender; presence fan-out must not change that");
+        assertFalse(second.last.get().contains("cat /var/log/quest.log"), second.last.get());
+        first.socket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+        second.socket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+    }
+
+    private static SocketInbox openInbox(String sessionId) {
+        SocketInbox inbox = new SocketInbox();
+        inbox.socket =
+                HttpClient.newHttpClient()
+                        .newWebSocketBuilder()
+                        .buildAsync(
+                                URI.create(
+                                        "ws://127.0.0.1:"
+                                                + RestAssured.port
+                                                + "/ws/sessions/"
+                                                + sessionId),
+                                inbox)
+                        .join();
+        return inbox;
+    }
+
+    private static String compactJson(String payload) {
+        return payload == null ? "" : payload.replaceAll("\\s+", "");
+    }
+
+    private static final class SocketInbox implements WebSocket.Listener {
+        final CountDownLatch opened = new CountDownLatch(1);
+        final CountDownLatch updated = new CountDownLatch(1);
+        final CountDownLatch command = new CountDownLatch(1);
+        final AtomicReference<String> last = new AtomicReference<>();
+        WebSocket socket;
+
+        @Override
+        public void onOpen(WebSocket webSocket) {
+            webSocket.request(1);
+        }
+
+        @Override
+        public CompletionStage<?> onText(
+                WebSocket webSocket, CharSequence data, boolean lastFrame) {
+            last.set(data.toString());
+            if (opened.getCount() > 0) {
+                opened.countDown();
+            } else if (updated.getCount() > 0) {
+                updated.countDown();
+            } else {
+                command.countDown();
+            }
+            webSocket.request(1);
+            return CompletableFuture.completedFuture(null);
+        }
     }
 }

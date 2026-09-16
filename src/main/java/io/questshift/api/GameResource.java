@@ -32,6 +32,8 @@ public class GameResource {
 
     @Inject CampaignLibrary campaigns;
 
+    @Inject SessionFanOut fanOut;
+
     @GET
     @Path("/campaigns")
     public Collection<Campaign> listCampaigns() {
@@ -76,7 +78,9 @@ public class GameResource {
     public GameSession presence(
             @PathParam("id") String id, SessionService.PresenceRequest request) {
         try {
-            return sessions.updatePresence(id, request);
+            GameSession session = sessions.updatePresence(id, request);
+            fanOut.fanOut(session.id, sessions.export(session.id, "json"));
+            return session;
         } catch (PartyConflictException e) {
             throw conflict(e, null, e.getErrorCode(), e.getMessage());
         } catch (PartyInvalidException e) {
