@@ -142,7 +142,8 @@ class GameResourceTest {
                 .get("/api/campaigns")
                 .then()
                 .statusCode(200)
-                .body("metadata.id", hasItem("devops-dungeon"));
+                .body("metadata.id", hasItem("devops-dungeon"))
+                .body("[0].rooms[0].clues.id", hasItem("shell-log"));
     }
 
     @Test
@@ -489,6 +490,47 @@ class GameResourceTest {
                 .then()
                 .statusCode(409)
                 .body("error", equalTo("party_full"));
+    }
+
+    @Test
+    void presenceWalksEntersAndPicksAClue() {
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .body("partyMembers[0].mapX", equalTo(120))
+                        .body("partyMembers[0].mapY", equalTo(276))
+                        .extract()
+                        .path("id");
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"name\":\"Ada\",\"mapX\":450,\"mapY\":360,\"viewedRoomId\":\"room-01-broken-shell\",\"pickupClueId\":\"shell-log\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(200)
+                .body("partyMembers[0].viewedRoomId", equalTo("room-01-broken-shell"))
+                .body("partyMembers[0].mapX", equalTo(450))
+                .body("foundClues", hasItem("shell-log"))
+                .body("currentRoomId", equalTo("room-01-broken-shell"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"name\":\"Ada\",\"mapX\":450,\"mapY\":360,\"viewedRoomId\":\"room-02-playbook-of-binding\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_presence"));
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Moss\",\"mapX\":1,\"mapY\":1}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_presence"));
     }
 
     private static Campaign loadCampaign() throws Exception {

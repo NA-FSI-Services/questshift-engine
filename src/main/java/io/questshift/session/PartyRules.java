@@ -33,7 +33,11 @@ public final class PartyRules {
         if (name.length() > MAX_ALIAS_LENGTH) {
             throw new PartyInvalidException("Alias is too long.");
         }
-        return new GameSession.PartyMember(name, seatId);
+        GameSession.PartyMember member = new GameSession.PartyMember(name, seatId);
+        member.mapX = raw.mapX;
+        member.mapY = raw.mapY;
+        member.viewedRoomId = raw.viewedRoomId == null ? "" : raw.viewedRoomId;
+        return member;
     }
 
     public static List<GameSession.PartyMember> requireOpeningParty(

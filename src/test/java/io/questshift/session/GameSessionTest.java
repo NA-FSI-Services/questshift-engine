@@ -22,6 +22,7 @@ class GameSessionTest {
         assertEquals("active", session.status);
         assertTrue(session.inventory.isEmpty());
         assertTrue(session.puzzleCompletion.isEmpty());
+        assertTrue(session.foundClues.isEmpty());
     }
 
     @Test

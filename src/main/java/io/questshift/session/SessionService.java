@@ -62,6 +62,7 @@ public class SessionService {
             session.startedAt = Instant.now();
             session.currentRoomId = first.id;
             session.partyMembers = PartyRules.requireOpeningParty(party);
+            spawnParty(session, first);
             campaign.rooms.forEach(room -> session.puzzleCompletion.put(room.id, false));
             GameMasterTurn turn = llm.narrate(campaign, session, first, campaign.story.opening);
             applyTurn(session, turn);
@@ -91,6 +92,8 @@ public class SessionService {
                 throw new PartyConflictException("party_full", "The party is full (8).");
             }
             List<GameSession.PartyMember> members = new ArrayList<>(session.partyMembers);
+            Campaign campaign = campaigns.require(session.campaignId);
+            PresenceRules.spawnAt(member, campaign.roomById(session.currentRoomId));
             members.add(member);
             session.partyMembers = members;
             return session;
@@ -185,6 +188,11 @@ public class SessionService {
             } else {
                 imported.commandLog = new ArrayList<>(imported.commandLog);
             }
+            if (imported.foundClues == null) {
+                imported.foundClues = new ArrayList<>();
+            } else {
+                imported.foundClues = new ArrayList<>(imported.foundClues);
+            }
             refreshStatus(imported);
             GameSession live = findLiveParty();
             if (isLive(imported) && live != null && !live.id.equals(imported.id)) {
@@ -210,6 +218,57 @@ public class SessionService {
         try {
             sessions.clear();
             byJoinCode.clear();
+        } finally {
+            partyLock.unlock();
+        }
+    }
+
+    public GameSession updatePresence(String sessionId, PresenceRequest body) {
+        partyLock.lock();
+        try {
+            GameSession session = get(sessionId);
+            if (!"active".equals(session.status)) {
+                throw new PartyConflictException(
+                        "party_not_active", "This hour is no longer active.");
+            }
+            if (body == null || body.name == null || body.name.isBlank()) {
+                throw new PartyInvalidException("Alias is required.");
+            }
+            GameSession.PartyMember member = findMember(session, body.name);
+            if (member == null) {
+                throw new PartyInvalidException("Unknown party member.");
+            }
+            Campaign campaign = campaigns.require(session.campaignId);
+            String viewed = body.viewedRoomId == null ? "" : body.viewedRoomId.trim();
+            if (!viewed.isEmpty()) {
+                Campaign.Room room = campaign.roomById(viewed);
+                if (room == null) {
+                    throw new PartyInvalidException("Unknown room.");
+                }
+                if (!PresenceRules.roomUnlocked(
+                        viewed, session.currentRoomId, session.puzzleCompletion)) {
+                    throw new PartyInvalidException("That room is still sealed.");
+                }
+            }
+            member.mapX = body.mapX;
+            member.mapY = body.mapY;
+            member.viewedRoomId = viewed;
+            String pickup = body.pickupClueId == null ? "" : body.pickupClueId.trim();
+            if (!pickup.isEmpty()) {
+                Campaign.Clue clue = PresenceRules.clueInRoom(campaign, viewed, pickup);
+                if (clue == null) {
+                    throw new PartyInvalidException("Unknown clue.");
+                }
+                if (session.foundClues == null) {
+                    session.foundClues = new ArrayList<>();
+                }
+                if (!session.foundClues.contains(clue.id)) {
+                    List<String> found = new ArrayList<>(session.foundClues);
+                    found.add(clue.id);
+                    session.foundClues = found;
+                }
+            }
+            return session;
         } finally {
             partyLock.unlock();
         }
@@ -324,6 +383,22 @@ public class SessionService {
         return SHARED_SEAT;
     }
 
+    private static GameSession.PartyMember findMember(GameSession session, String name) {
+        String key = PartyRules.normalizeAlias(name);
+        for (GameSession.PartyMember member : session.partyMembers) {
+            if (key.equals(PartyRules.normalizeAlias(member.name))) {
+                return member;
+            }
+        }
+        return null;
+    }
+
+    private static void spawnParty(GameSession session, Campaign.Room room) {
+        for (GameSession.PartyMember member : session.partyMembers) {
+            PresenceRules.spawnAt(member, room);
+        }
+    }
+
     private void applyTurn(GameSession session, GameMasterTurn turn) {
         session.lastNarrative = turn.narrative;
         session.lastHint = turn.hint;
@@ -339,5 +414,13 @@ public class SessionService {
         public String command;
         public String seatId;
         public GameSession session;
+    }
+
+    public static class PresenceRequest {
+        public String name;
+        public int mapX;
+        public int mapY;
+        public String viewedRoomId;
+        public String pickupClueId;
     }
 }

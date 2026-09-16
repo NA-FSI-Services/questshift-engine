@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class StateSerializerTest {
@@ -28,6 +29,11 @@ class StateSerializerTest {
         attempt.passed = false;
         attempt.message = "miss";
         session.commandLog.add(attempt);
+        session.foundClues.add("shell-log");
+        GameSession.PartyMember ada = new GameSession.PartyMember("Ada", "guardian");
+        ada.mapX = 120;
+        ada.mapY = 276;
+        session.partyMembers.add(ada);
         StateSerializer serializer = new StateSerializer();
         GameSession restored = serializer.fromYaml(serializer.toYaml(session));
         assertEquals("demo", restored.id);
@@ -38,6 +44,9 @@ class StateSerializerTest {
         assertEquals(1, restored.commandLog.size());
         assertEquals("Ada", restored.commandLog.getFirst().name);
         assertEquals("cat /var/log/quest.log", restored.commandLog.getFirst().command);
+        assertEquals(List.of("shell-log"), restored.foundClues);
+        assertEquals(120, restored.partyMembers.getFirst().mapX);
+        assertEquals(276, restored.partyMembers.getFirst().mapY);
     }
 
     @Test

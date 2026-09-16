@@ -25,6 +25,7 @@ public class GameSession {
     public String lastHint;
     public String lastCanvasEvent;
     public List<CommandLogEntry> commandLog = new ArrayList<>();
+    public List<String> foundClues = new ArrayList<>();
 
     /** True when the last GM turn used campaign YAML because vLLM was off or unreachable. */
     public boolean yamlFallback;
@@ -32,6 +33,9 @@ public class GameSession {
     public static class PartyMember {
         public String name;
         public String seatId;
+        public int mapX;
+        public int mapY;
+        public String viewedRoomId = "";
 
         public PartyMember() {}
 

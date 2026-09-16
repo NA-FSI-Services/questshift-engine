@@ -72,6 +72,19 @@ public class GameResource {
     }
 
     @POST
+    @Path("/sessions/{id}/presence")
+    public GameSession presence(
+            @PathParam("id") String id, SessionService.PresenceRequest request) {
+        try {
+            return sessions.updatePresence(id, request);
+        } catch (PartyConflictException e) {
+            throw conflict(e, null, e.getErrorCode(), e.getMessage());
+        } catch (PartyInvalidException e) {
+            throw invalidPresence(e);
+        }
+    }
+
+    @POST
     @Path("/sessions/{id}/commands")
     public CommandResult command(@PathParam("id") String id, CommandRequest request) {
         CommandRequest body = request == null ? new CommandRequest() : request;
@@ -120,6 +133,14 @@ public class GameResource {
     private static WebApplicationException invalidParty(RuntimeException e) {
         ApiError body = new ApiError();
         body.error = "invalid_party";
+        body.message = e.getMessage();
+        return new WebApplicationException(
+                e, Response.status(400).type(MediaType.APPLICATION_JSON).entity(body).build());
+    }
+
+    private static WebApplicationException invalidPresence(RuntimeException e) {
+        ApiError body = new ApiError();
+        body.error = "invalid_presence";
         body.message = e.getMessage();
         return new WebApplicationException(
                 e, Response.status(400).type(MediaType.APPLICATION_JSON).entity(body).build());
