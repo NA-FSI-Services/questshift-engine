@@ -9,16 +9,29 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 @ApplicationScoped
 public class SessionService {
 
+    private static final int DEFAULT_DURATION_MINUTES = 60;
+
+    private static final int MIN_DURATION_MINUTES = 1;
+
     private final Map<String, GameSession> sessions = new ConcurrentHashMap<>();
+
+    private final Map<String, GameSession> byJoinCode = new ConcurrentHashMap<>();
+
+    private final Lock partyLock = new ReentrantLock();
 
     @Inject CampaignLibrary campaigns;
 
@@ -29,37 +42,70 @@ public class SessionService {
     @Inject StateSerializer serializer;
 
     public GameSession start(String campaignId, List<GameSession.PartyMember> party) {
-        Campaign campaign =
-                campaignId == null || campaignId.isBlank()
-                        ? campaigns.defaultCampaign()
-                        : campaigns.require(campaignId);
-        Campaign.Room first = campaign.firstRoom();
-        GameSession session = new GameSession();
-        session.id = UUID.randomUUID().toString();
-        session.campaignId = campaign.metadata.id;
-        session.startedAt = Instant.now();
-        session.currentRoomId = first.id;
-        session.partyMembers =
-                party == null || party.isEmpty()
-                        ? List.of(
-                                new GameSession.PartyMember("Facilitator", "guardian"),
-                                new GameSession.PartyMember("Player 2", "automancer"),
-                                new GameSession.PartyMember("Player 3", "ranger"),
-                                new GameSession.PartyMember("Player 4", "artificer"))
-                        : party;
-        campaign.rooms.forEach(room -> session.puzzleCompletion.put(room.id, false));
-        GameMasterTurn turn = llm.narrate(campaign, session, first, campaign.story.opening);
-        applyTurn(session, turn);
-        sessions.put(session.id, session);
-        return session;
+        partyLock.lock();
+        try {
+            GameSession live = findLiveParty();
+            if (live != null) {
+                throw new PartyActiveException(live.joinCode);
+            }
+            Campaign campaign =
+                    campaignId == null || campaignId.isBlank()
+                            ? campaigns.defaultCampaign()
+                            : campaigns.require(campaignId);
+            Campaign.Room first = campaign.firstRoom();
+            GameSession session = new GameSession();
+            session.id = UUID.randomUUID().toString();
+            session.joinCode = JoinCodes.allocate(occupiedJoinCodes());
+            session.campaignId = campaign.metadata.id;
+            session.startedAt = Instant.now();
+            session.currentRoomId = first.id;
+            session.partyMembers = PartyRules.requireOpeningParty(party);
+            campaign.rooms.forEach(room -> session.puzzleCompletion.put(room.id, false));
+            GameMasterTurn turn = llm.narrate(campaign, session, first, campaign.story.opening);
+            applyTurn(session, turn);
+            index(session);
+            return session;
+        } finally {
+            partyLock.unlock();
+        }
+    }
+
+    public GameSession addMember(String sessionId, GameSession.PartyMember raw) {
+        partyLock.lock();
+        try {
+            GameSession session = get(sessionId);
+            if (!"active".equals(session.status)) {
+                throw new PartyConflictException(
+                        "party_not_active", "This hour is no longer active.");
+            }
+            GameSession.PartyMember member = PartyRules.requireMember(raw);
+            String key = PartyRules.normalizeAlias(member.name);
+            for (GameSession.PartyMember existing : session.partyMembers) {
+                if (key.equals(PartyRules.normalizeAlias(existing.name))) {
+                    return session;
+                }
+            }
+            if (session.partyMembers.size() >= PartyRules.MAX_MEMBERS) {
+                throw new PartyConflictException("party_full", "The party is full (8).");
+            }
+            List<GameSession.PartyMember> members = new ArrayList<>(session.partyMembers);
+            members.add(member);
+            session.partyMembers = members;
+            return session;
+        } finally {
+            partyLock.unlock();
+        }
     }
 
     public GameSession get(String id) {
         GameSession session = sessions.get(id);
         if (session == null) {
+            session = byJoinCode.get(JoinCodes.normalize(id));
+        }
+        if (session == null) {
             throw new NotFoundException("No session " + id);
         }
-        session.tickElapsed();
+        refreshStatus(session);
         return session;
     }
 
@@ -121,12 +167,44 @@ public class SessionService {
     }
 
     public GameSession restore(GameSession imported) {
-        if (imported.id == null || imported.id.isBlank()) {
-            imported.id = UUID.randomUUID().toString();
+        partyLock.lock();
+        try {
+            if (imported.id == null || imported.id.isBlank()) {
+                imported.id = UUID.randomUUID().toString();
+            }
+            if (imported.partyMembers == null) {
+                imported.partyMembers = new ArrayList<>();
+            } else {
+                imported.partyMembers = new ArrayList<>(imported.partyMembers);
+            }
+            refreshStatus(imported);
+            GameSession live = findLiveParty();
+            if (isLive(imported) && live != null && !live.id.equals(imported.id)) {
+                throw new PartyActiveException(live.joinCode);
+            }
+            Set<String> taken = occupiedJoinCodesExcluding(imported.id);
+            String wanted = JoinCodes.normalize(imported.joinCode);
+            if (!JoinCodes.isJoinCode(wanted) || taken.contains(wanted)) {
+                imported.joinCode = JoinCodes.allocate(taken);
+            } else {
+                imported.joinCode = wanted;
+            }
+            index(imported);
+            return imported;
+        } finally {
+            partyLock.unlock();
         }
-        imported.tickElapsed();
-        sessions.put(imported.id, imported);
-        return imported;
+    }
+
+    /** Test helper: drop in-memory parties so each @QuarkusTest can Start. */
+    public void clear() {
+        partyLock.lock();
+        try {
+            sessions.clear();
+            byJoinCode.clear();
+        } finally {
+            partyLock.unlock();
+        }
     }
 
     public String export(String sessionId, String format) {
@@ -139,6 +217,65 @@ public class SessionService {
 
     public GameSession restoreRaw(String body, String format) {
         return restore(serializer.from(body, format));
+    }
+
+    private void index(GameSession session) {
+        GameSession previous = sessions.put(session.id, session);
+        if (previous != null && previous.joinCode != null) {
+            byJoinCode.remove(JoinCodes.normalize(previous.joinCode), previous);
+        }
+        byJoinCode.put(JoinCodes.normalize(session.joinCode), session);
+    }
+
+    private GameSession findLiveParty() {
+        for (GameSession session : sessions.values()) {
+            refreshStatus(session);
+            if (isLive(session)) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    private boolean isLive(GameSession session) {
+        return "active".equals(session.status);
+    }
+
+    private void refreshStatus(GameSession session) {
+        session.tickElapsed();
+        if (!"active".equals(session.status) || session.campaignId == null) {
+            return;
+        }
+        int minutes = DEFAULT_DURATION_MINUTES;
+        try {
+            minutes = campaigns.require(session.campaignId).metadata.durationMinutes;
+        } catch (IllegalArgumentException ignored) {
+            // Keep the 60-minute freeze if the campaign map is empty.
+        }
+        if (minutes < MIN_DURATION_MINUTES) {
+            minutes = DEFAULT_DURATION_MINUTES;
+        }
+        if (session.elapsedSeconds >= minutes * 60L) {
+            session.status = "expired";
+        }
+    }
+
+    private Set<String> occupiedJoinCodes() {
+        return occupiedJoinCodesExcluding(null);
+    }
+
+    private Set<String> occupiedJoinCodesExcluding(String sessionId) {
+        Set<String> taken = new HashSet<>();
+        for (GameSession session : sessions.values()) {
+            if (sessionId != null && sessionId.equals(session.id)) {
+                continue;
+            }
+            String code = JoinCodes.normalize(session.joinCode);
+            if (!code.isEmpty()) {
+                taken.add(code);
+            }
+        }
+        return taken;
     }
 
     private void applyTurn(GameSession session, GameMasterTurn turn) {

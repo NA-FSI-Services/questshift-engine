@@ -13,21 +13,37 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.quarkus.test.junit.QuarkusTest;
 import io.questshift.campaign.Campaign;
+import io.questshift.session.GameSession;
+import io.questshift.session.SessionService;
 import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
 import java.io.InputStream;
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class GameResourceTest {
 
+    private static final String ADA_PARTY =
+            "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}";
+
+    @Inject SessionService sessions;
+
+    @BeforeEach
+    void clearParties() {
+        sessions.clear();
+    }
+
     @Test
     void startSessionUsesYamlWhenLlmDisabled() {
         Map<?, ?> session =
                 given().contentType(ContentType.JSON)
-                        .body("{}")
+                        .body(ADA_PARTY)
                         .when()
                         .post("/api/sessions")
                         .then()
@@ -42,6 +58,7 @@ class GameResourceTest {
         assertTrue(narrative.contains("Torchlight"), narrative);
         assertEquals(Boolean.TRUE, session.get("yamlFallback"));
         assertNotNull(session.get("id"));
+        assertTrue(String.valueOf(session.get("joinCode")).matches("[a-z]+-[a-z]+"));
     }
 
     @Test
@@ -49,7 +66,7 @@ class GameResourceTest {
         Campaign campaign = loadCampaign();
         String sessionId =
                 given().contentType(ContentType.JSON)
-                        .body("{\"campaignId\":\"devops-dungeon\"}")
+                        .body(ADA_PARTY)
                         .when()
                         .post("/api/sessions")
                         .then()
@@ -134,10 +151,100 @@ class GameResourceTest {
     }
 
     @Test
+    void secondStartIsConflictUntilTheHourEnds() {
+        String joinCode =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("joinCode");
+        given().contentType(ContentType.JSON)
+                .body(ADA_PARTY)
+                .when()
+                .post("/api/sessions")
+                .then()
+                .statusCode(409)
+                .body("error", equalTo("party_active"))
+                .body("joinCode", equalTo(joinCode));
+    }
+
+    @Test
+    void getSessionAcceptsJoinCodeCaseInsensitively() {
+        Map<?, ?> session =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .as(Map.class);
+        String id = String.valueOf(session.get("id"));
+        String joinCode = String.valueOf(session.get("joinCode"));
+        given().when()
+                .get("/api/sessions/" + joinCode.toUpperCase(Locale.ROOT))
+                .then()
+                .statusCode(200)
+                .body("id", equalTo(id))
+                .body("joinCode", equalTo(joinCode));
+    }
+
+    @Test
+    void startSucceedsAfterTheHourExpires() {
+        String id =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("id");
+        GameSession live = sessions.get(id);
+        live.startedAt = Instant.now().minusSeconds(3601);
+        given().contentType(ContentType.JSON)
+                .body(ADA_PARTY)
+                .when()
+                .post("/api/sessions")
+                .then()
+                .statusCode(200);
+        given().when()
+                .get("/api/sessions/" + id)
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("expired"));
+    }
+
+    @Test
+    void importOfAnActivePartyConflictsWhileOneIsLive() {
+        given().contentType(ContentType.JSON)
+                .body(ADA_PARTY)
+                .when()
+                .post("/api/sessions")
+                .then()
+                .statusCode(200);
+        given().contentType(ContentType.TEXT)
+                .queryParam("format", "yaml")
+                .body(
+                        "id: 11111111-2222-3333-4444-555555555555\n"
+                                + "campaignId: devops-dungeon\n"
+                                + "status: active\n"
+                                + "currentRoomId: room-01-broken-shell\n")
+                .when()
+                .post("/api/sessions/import")
+                .then()
+                .statusCode(409)
+                .body("error", equalTo("party_active"));
+    }
+
+    @Test
     void emptyCommandFailsWithoutAdvancing() {
         String sessionId =
                 given().contentType(ContentType.JSON)
-                        .body("{}")
+                        .body(ADA_PARTY)
                         .when()
                         .post("/api/sessions")
                         .then()
@@ -168,15 +275,27 @@ class GameResourceTest {
     }
 
     @Test
-    void startTreatsBlankCampaignAndEmptyPartyAsDefaults() {
+    void startTreatsBlankCampaignWithAMemberAsDefaultDungeon() {
         given().contentType(ContentType.JSON)
-                .body("{\"campaignId\":\"  \",\"party\":[]}")
+                .body(
+                        "{\"campaignId\":\"  \",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}")
                 .when()
                 .post("/api/sessions")
                 .then()
                 .statusCode(200)
                 .body("campaignId", equalTo("devops-dungeon"))
-                .body("partyMembers.size()", equalTo(4));
+                .body("partyMembers.size()", equalTo(1));
+    }
+
+    @Test
+    void emptyPartyOnStartIsRejected() {
+        given().contentType(ContentType.JSON)
+                .body("{\"campaignId\":\"devops-dungeon\",\"party\":[]}")
+                .when()
+                .post("/api/sessions")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_party"));
     }
 
     @Test
@@ -184,7 +303,10 @@ class GameResourceTest {
         Map<?, ?> missingId =
                 given().contentType(ContentType.TEXT)
                         .queryParam("format", "yaml")
-                        .body("campaignId: devops-dungeon\ncurrentRoomId: room-01-broken-shell\n")
+                        .body(
+                                "campaignId: devops-dungeon\n"
+                                        + "status: complete\n"
+                                        + "currentRoomId: room-01-broken-shell\n")
                         .when()
                         .post("/api/sessions/import")
                         .then()
@@ -196,7 +318,10 @@ class GameResourceTest {
                 given().contentType(ContentType.TEXT)
                         .queryParam("format", "yaml")
                         .body(
-                                "id: \"  \"\ncampaignId: devops-dungeon\ncurrentRoomId: room-01-broken-shell\n")
+                                "id: \"  \"\n"
+                                        + "campaignId: devops-dungeon\n"
+                                        + "status: complete\n"
+                                        + "currentRoomId: room-01-broken-shell\n")
                         .when()
                         .post("/api/sessions/import")
                         .then()
@@ -213,7 +338,7 @@ class GameResourceTest {
     void defaultExportIsYaml() {
         String sessionId =
                 given().contentType(ContentType.JSON)
-                        .body("{}")
+                        .body(ADA_PARTY)
                         .when()
                         .post("/api/sessions")
                         .then()
@@ -227,7 +352,7 @@ class GameResourceTest {
     void jsonExportImportRoundTrip() {
         String sessionId =
                 given().contentType(ContentType.JSON)
-                        .body("{}")
+                        .body(ADA_PARTY)
                         .when()
                         .post("/api/sessions")
                         .then()
@@ -250,6 +375,84 @@ class GameResourceTest {
                 .statusCode(200)
                 .body("id", equalTo(sessionId))
                 .body("campaignId", equalTo("devops-dungeon"));
+    }
+
+    @Test
+    void joinAddsAUniqueAliasAndRejectsDuplicates() {
+        String joinCode =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("joinCode");
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Linus\",\"seatId\":\"automancer\"}")
+                .when()
+                .post("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(200)
+                .body("partyMembers.size()", equalTo(2))
+                .body("partyMembers[1].name", equalTo("Linus"));
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"ada\",\"seatId\":\"ranger\"}")
+                .when()
+                .post("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(200)
+                .body("partyMembers.size()", equalTo(2))
+                .body("partyMembers[0].seatId", equalTo("guardian"));
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Briar\",\"seatId\":\"not-a-seat\"}")
+                .when()
+                .post("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_party"));
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Briar\",\"seatId\":\"guardian\"}")
+                .when()
+                .post("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(200)
+                .body("partyMembers.size()", equalTo(3));
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Briar\",\"seatId\":\"artificer\"}")
+                .when()
+                .post("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(200)
+                .body("partyMembers.size()", equalTo(3));
+    }
+
+    @Test
+    void ninthPlayerIsRejected() {
+        String id =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("id");
+        for (int i = 2; i <= 8; i++) {
+            given().contentType(ContentType.JSON)
+                    .body("{\"name\":\"Player" + i + "\",\"seatId\":\"guardian\"}")
+                    .when()
+                    .post("/api/sessions/" + id + "/party")
+                    .then()
+                    .statusCode(200);
+        }
+        given().contentType(ContentType.JSON)
+                .body("{\"name\":\"Player9\",\"seatId\":\"guardian\"}")
+                .when()
+                .post("/api/sessions/" + id + "/party")
+                .then()
+                .statusCode(409)
+                .body("error", equalTo("party_full"));
     }
 
     private static Campaign loadCampaign() throws Exception {

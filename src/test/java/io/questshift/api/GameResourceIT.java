@@ -6,10 +6,14 @@ import static org.hamcrest.Matchers.notNullValue;
 
 import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.restassured.http.ContentType;
+import jakarta.ws.rs.core.Response.Status;
 import org.junit.jupiter.api.Test;
 
 @QuarkusIntegrationTest
 class GameResourceIT {
+
+    private static final String ADA_PARTY =
+            "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}";
 
     @Test
     void campaignsLoadFromPackagedApp() {
@@ -18,10 +22,8 @@ class GameResourceIT {
 
     @Test
     void startSessionOnPackagedAppUsesYamlWhenLlmDisabled() {
-        given().contentType(ContentType.JSON)
-                .body("{}")
-                .when()
-                .post("/api/sessions")
+        given().when()
+                .get("/api/sessions/" + startOrReuse())
                 .then()
                 .statusCode(200)
                 .body("campaignId", equalTo("devops-dungeon"))
@@ -36,15 +38,7 @@ class GameResourceIT {
 
     @Test
     void packagedAppRejectsEmptyCommandAndExportsYaml() {
-        String sessionId =
-                given().contentType(ContentType.JSON)
-                        .body("{}")
-                        .when()
-                        .post("/api/sessions")
-                        .then()
-                        .statusCode(200)
-                        .extract()
-                        .path("id");
+        String sessionId = startOrReuse();
 
         given().contentType(ContentType.JSON)
                 .body("{\"command\":\"\",\"seatId\":\"guardian\"}")
@@ -56,5 +50,19 @@ class GameResourceIT {
                 .body("session.currentRoomId", equalTo("room-01-broken-shell"));
 
         given().when().get("/api/sessions/" + sessionId + "/export").then().statusCode(200);
+    }
+
+    private static String startOrReuse() {
+        var response = given().contentType(ContentType.JSON).body(ADA_PARTY).post("/api/sessions");
+        if (response.statusCode() == Status.OK.getStatusCode()) {
+            return response.path("id");
+        }
+        String joinCode = response.path("joinCode");
+        return given().when()
+                .get("/api/sessions/" + joinCode)
+                .then()
+                .statusCode(200)
+                .extract()
+                .path("id");
     }
 }

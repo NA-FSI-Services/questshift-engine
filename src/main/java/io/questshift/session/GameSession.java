@@ -10,6 +10,7 @@ import java.util.Map;
 public class GameSession {
 
     public String id;
+    public String joinCode;
     public String campaignId;
     public String status = "active";
     public String currentRoomId;

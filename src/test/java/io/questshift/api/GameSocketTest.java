@@ -4,8 +4,10 @@ import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.test.junit.QuarkusTest;
+import io.questshift.session.SessionService;
 import io.restassured.RestAssured;
 import io.restassured.http.ContentType;
+import jakarta.inject.Inject;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
@@ -14,16 +16,25 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class GameSocketTest {
 
+    @Inject SessionService sessions;
+
+    @BeforeEach
+    void clearParties() {
+        sessions.clear();
+    }
+
     @Test
     void openPushesJsonSnapshot() throws Exception {
         String sessionId =
                 given().contentType(ContentType.JSON)
-                        .body("{}")
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}")
                         .when()
                         .post("/api/sessions")
                         .then()
@@ -62,7 +73,8 @@ class GameSocketTest {
     void commandFramePushesUpdatedSnapshot() throws Exception {
         String sessionId =
                 given().contentType(ContentType.JSON)
-                        .body("{}")
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}")
                         .when()
                         .post("/api/sessions")
                         .then()
