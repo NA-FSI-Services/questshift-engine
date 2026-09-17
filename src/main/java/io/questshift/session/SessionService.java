@@ -182,10 +182,20 @@ public class SessionService {
             if (next == null) {
                 session.status = "complete";
                 session.currentRoomId = room.id;
-                turn = llm.narrate(campaign, session, room, room.successNarrative);
+                turn =
+                        llm.narrateAttempt(
+                                campaign,
+                                session,
+                                room,
+                                room.successNarrative,
+                                command,
+                                true,
+                                LLMService.firstAcceptedExample(room));
             } else {
                 session.currentRoomId = next.id;
-                turn = llm.narrate(campaign, session, next, room.successNarrative);
+                // Scene beat for the new room. Do not send the previous winning
+                // command as if it were an attempt at this puzzle.
+                turn = llm.narrate(campaign, session, next, previousRoomSceneExtra(room));
             }
             applyTurn(session, turn);
             result.session = session;
@@ -200,13 +210,14 @@ public class SessionService {
             return result;
         }
         GameMasterTurn miss =
-                llm.narrate(
+                llm.narrateAttempt(
                         campaign,
                         session,
                         room,
-                        "The party tried: "
-                                + command
-                                + ". It failed. Offer a short miss beat, then the hint if they are stuck.");
+                        evaluation.message(),
+                        command,
+                        false,
+                        LLMService.firstAcceptedExample(room));
         applyTurn(session, miss);
         result.session = session;
         return result;
@@ -412,6 +423,15 @@ public class SessionService {
         List<GameSession.CommandLogEntry> log = new ArrayList<>(session.commandLog);
         log.add(entry);
         session.commandLog = log;
+    }
+
+    static String previousRoomSceneExtra(Campaign.Room solved) {
+        String beat =
+                solved == null || solved.successNarrative == null ? "" : solved.successNarrative;
+        return "The party just solved the previous room. The following is that room's authored"
+                + " success beat — not a player command for THIS room. Set the scene here. Do not"
+                + " recap their previous submission. Do not dump this room's winning command.\n\n"
+                + beat;
     }
 
     private static String resolveAlias(GameSession session, String name, String seatId) {

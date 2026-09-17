@@ -28,7 +28,7 @@ questshift.llm.base-url=http://vllm.example:8000/v1
 questshift.llm.model=ibm-granite/granite-3.2-8b-instruct
 ```
 
-Do not put a real API key or a private URL in git. Copy `application-local.properties.example` to gitignored `application-local.properties` and set `%dev.questshift.llm.*` there. `./mvnw quarkus:dev` then loads that overlay; `./mvnw test` stays on `%test` with the LLM off.
+Do not put a real API key or a private URL in git. Copy `application-local.properties.example` to gitignored `application-local.properties` and set `%dev.questshift.llm.*` there (`base-url` is the OpenAI-compatible `/v1` root, including a workshop MaaS gateway). `./mvnw quarkus:dev` then loads that overlay; `./mvnw test` stays on `%test` with the LLM off. YAML still scores; the GM prompt includes the player submission and the first `accepted_examples` as private coaching.
 
 If the endpoint is down, narration falls back to the authored campaign YAML so a dry run still works. Do not add Ollama.
 

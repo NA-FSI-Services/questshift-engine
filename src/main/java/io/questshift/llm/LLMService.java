@@ -53,7 +53,31 @@ public class LLMService {
 
     public GameMasterTurn narrate(
             Campaign campaign, GameSession session, Campaign.Room room, String extra) {
-        GameMasterTurn fallback = fallbackTurn(room, extra);
+        return narrate(campaign, session, room, PromptContext.scene(extra));
+    }
+
+    /**
+     * Score already ran. Send the player submission plus the intended accepted example so Granite
+     * can give Game Master-tone feedback (including chatter like "Hello") without rewriting YAML.
+     */
+    public GameMasterTurn narrateAttempt(
+            Campaign campaign,
+            GameSession session,
+            Campaign.Room room,
+            String extra,
+            String playerSubmission,
+            boolean yamlPassed,
+            String intendedExample) {
+        return narrate(
+                campaign,
+                session,
+                room,
+                PromptContext.attempt(extra, playerSubmission, yamlPassed, intendedExample));
+    }
+
+    private GameMasterTurn narrate(
+            Campaign campaign, GameSession session, Campaign.Room room, PromptContext context) {
+        GameMasterTurn fallback = fallbackTurn(room, context.extra());
         if (!enabled) {
             return fallback;
         }
@@ -67,7 +91,7 @@ public class LLMService {
                                                     "system", campaign.gameMaster.systemPrompt),
                                             new ChatMessage(
                                                     "user",
-                                                    userPrompt(campaign, session, room, extra))),
+                                                    userPrompt(campaign, session, room, context))),
                                     0.4,
                                     700));
             HttpRequest.Builder builder =
@@ -201,8 +225,23 @@ public class LLMService {
         return turn;
     }
 
-    private String userPrompt(
-            Campaign campaign, GameSession session, Campaign.Room room, String extra) {
+    String userPrompt(
+            Campaign campaign, GameSession session, Campaign.Room room, PromptContext context) {
+        boolean sceneBeat = context.yamlPassed() == null;
+        String intended = context.intendedExample();
+        if (sceneBeat) {
+            intended = "(withheld — scene beat, not a scored attempt)";
+        } else if (intended == null || intended.isBlank()) {
+            intended = firstAcceptedExample(room);
+        }
+        String submission =
+                context.playerSubmission() == null || context.playerSubmission().isBlank()
+                        ? "(none — this is a scene beat)"
+                        : context.playerSubmission();
+        String yamlScore =
+                sceneBeat
+                        ? "none (scene beat, not a scored attempt)"
+                        : (context.yamlPassed() ? "passed" : "failed");
         return """
                 Campaign: %s
                 Elapsed seconds: %d
@@ -210,26 +249,75 @@ public class LLMService {
                 Puzzle type: %s
                 Room prompt: %s
                 Authored narrative: %s
-                Expected command pattern (do not rewrite): %s
+                Expected command pattern (do not rewrite, do not dump in narrative): %s
+                Intended accepted example (private coaching; never quote in narrative unless Extra says they asked for a hint after a fail):
+                %s
                 Inventory: %s
-                Extra: %s
+                YAML scorer result: %s
+                Player submission:
+                %s
+                Extra:
+                %s
+
+                Stay in Game Master voice.
+                YAML already scored; you narrate only.
+                %s
 
                 Return JSON only:
                 {"narrative":"...","puzzle_type":"%s","expected_command_pattern":"%s","hint":"...","canvas_event":"focus_room"}
                 """
                 .formatted(
-                        campaign.metadata.title,
+                        fmtArg(campaign.metadata.title),
                         session.elapsedSeconds,
-                        room.title,
-                        room.id,
-                        room.puzzleType,
-                        room.prompt,
-                        room.narrative,
-                        room.expectedCommandPattern,
-                        session.inventory,
-                        extra == null ? "" : extra,
-                        room.puzzleType,
-                        room.expectedCommandPattern.replace("\"", "\\\""));
+                        fmtArg(room.title),
+                        fmtArg(room.id),
+                        fmtArg(room.puzzleType),
+                        fmtArg(room.prompt),
+                        fmtArg(room.narrative),
+                        fmtArg(room.expectedCommandPattern),
+                        fmtArg(intended),
+                        fmtArg(String.valueOf(session.inventory)),
+                        yamlScore,
+                        fmtArg(submission),
+                        fmtArg(context.extra() == null ? "" : context.extra()),
+                        coaching(context.yamlPassed()),
+                        fmtArg(room.puzzleType),
+                        fmtArg(room.expectedCommandPattern).replace("\"", "\\\""));
+    }
+
+    public static String firstAcceptedExample(Campaign.Room room) {
+        if (room == null || room.acceptedExamples == null || room.acceptedExamples.isEmpty()) {
+            return "(none authored)";
+        }
+        String example = room.acceptedExamples.getFirst();
+        return example == null || example.isBlank() ? "(none authored)" : example.strip();
+    }
+
+    private static String coaching(Boolean yamlPassed) {
+        if (yamlPassed == null) {
+            return "This is a scene beat for the CURRENT room, not a scored attempt. If Extra says the previous room was solved, acknowledge it in one clause, then set THIS room's scene from the authored narrative. There is no player submission against this puzzle. Do not critique Extra as a wrong command. Do not dump this room's intended example or regex.";
+        }
+        if (yamlPassed) {
+            return "YAML scorer passed. Celebrate the submission in Game Master voice. Do not quote the intended example or regex.";
+        }
+        return "Give feedback about the player submission. If it is chatter, a greeting, or not a command / YAML / oc / Java snippet that could solve this room, tell them you need a solving command. YAML scorer failed. Do not quote the intended example.";
+    }
+
+    private static String fmtArg(String value) {
+        return value == null ? "" : value.replace("%", "%%");
+    }
+
+    record PromptContext(
+            String extra, String playerSubmission, Boolean yamlPassed, String intendedExample) {
+
+        static PromptContext scene(String extra) {
+            return new PromptContext(extra, null, null, null);
+        }
+
+        static PromptContext attempt(
+                String extra, String playerSubmission, boolean yamlPassed, String intendedExample) {
+            return new PromptContext(extra, playerSubmission, yamlPassed, intendedExample);
+        }
     }
 
     private static String extractJson(String content) {

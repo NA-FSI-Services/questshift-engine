@@ -30,10 +30,111 @@ class LLMServiceTest {
         llm.apiKey = "none";
         llm.timeoutSeconds = 1;
         lastAuthorization = null;
+        lastRequestBody = null;
         room.narrative = "Authored beat.";
         room.puzzleType = "linux";
         room.expectedCommandPattern = "grep.*rune";
         room.hint = "pipe";
+    }
+
+    @Test
+    void userPromptIncludesSubmissionAcceptedExampleAndChatterCoaching() {
+        Campaign campaign = demoCampaign();
+        room.acceptedExamples = List.of("grep -i rune /var/log/quest.log | awk '{print $NF}'");
+        room.title = "The Broken Shell";
+        room.id = "room-01-broken-shell";
+        room.prompt = "Pipe the log.";
+        String prompt =
+                llm.userPrompt(
+                        campaign,
+                        new GameSession(),
+                        room,
+                        LLMService.PromptContext.attempt(
+                                "Nothing happens. The pattern does not bind.",
+                                "Hello",
+                                false,
+                                null));
+        assertTrue(prompt.contains("Hello"), prompt);
+        assertTrue(prompt.contains("awk '{print $NF}'"), prompt);
+        assertTrue(prompt.contains("YAML scorer result: failed"), prompt);
+        assertTrue(prompt.contains("greeting"), prompt);
+        assertTrue(prompt.contains("command / YAML / oc / Java snippet"), prompt);
+        assertTrue(prompt.contains("solving command"), prompt);
+        assertTrue(prompt.contains("Do not quote the intended example"), prompt);
+    }
+
+    @Test
+    void sceneBeatPromptWithholdsSubmissionAndAcceptedExample() {
+        Campaign campaign = demoCampaign();
+        room.title = "The Pod That Would Not Wake";
+        room.id = "room-03-pod-that-would-not-wake";
+        room.puzzleType = "openshift";
+        room.prompt = "Set the probe.";
+        room.acceptedExamples =
+                List.of(
+                        "oc set probe pod/crashing-wizard --liveness --get-url=http://:8080/healthz -n dungeon");
+        String extra =
+                "The party just solved the previous room. The following is that room's authored"
+                        + " success beat — not a player command for THIS room.\n\nThe familiar"
+                        + " yields. The name is written.";
+        String prompt =
+                llm.userPrompt(
+                        campaign, new GameSession(), room, LLMService.PromptContext.scene(extra));
+        assertTrue(prompt.contains("scene beat, not a scored attempt"), prompt);
+        assertTrue(prompt.contains("(none — this is a scene beat)"), prompt);
+        assertTrue(prompt.contains("(withheld — scene beat, not a scored attempt)"), prompt);
+        assertTrue(prompt.contains("Do not critique Extra as a wrong command"), prompt);
+        assertFalse(prompt.contains("hosts: dungeon"), prompt);
+        assertFalse(prompt.contains("crashing-wizard"), prompt);
+        assertFalse(prompt.contains("gather_facts"), prompt);
+    }
+
+    @Test
+    void missFallbackDoesNotLeakAcceptedExample() {
+        room.acceptedExamples = List.of("grep -i rune /var/log/quest.log | awk '{print $NF}'");
+        LLMService.GameMasterTurn turn =
+                llm.narrateAttempt(
+                        demoCampaign(),
+                        new GameSession(),
+                        room,
+                        "Nothing happens. The pattern does not bind.",
+                        "Hello",
+                        false,
+                        null);
+        assertTrue(turn.yamlFallback);
+        assertTrue(turn.narrative.contains("Nothing happens"), turn.narrative);
+        assertFalse(turn.narrative.contains("awk"), turn.narrative);
+        assertFalse(turn.narrative.contains("grep -i rune"), turn.narrative);
+    }
+
+    @Test
+    void passAttemptPromptKeepsCallerIntendedExample() {
+        Campaign campaign = demoCampaign();
+        room.acceptedExamples = List.of("NEXT-ROOM-WIN");
+        String prompt =
+                llm.userPrompt(
+                        campaign,
+                        new GameSession(),
+                        room,
+                        LLMService.PromptContext.attempt(
+                                "The golem yields.",
+                                "grep -i rune /var/log/quest.log | awk '{print $NF}'",
+                                true,
+                                "grep -i rune /var/log/quest.log | awk '{print $NF}'"));
+        assertTrue(prompt.contains("YAML scorer result: passed"), prompt);
+        assertTrue(prompt.contains("Celebrate"), prompt);
+        assertTrue(prompt.contains("grep -i rune /var/log/quest.log"), prompt);
+        assertFalse(prompt.contains("NEXT-ROOM-WIN"), prompt);
+    }
+
+    @Test
+    void firstAcceptedExampleStripsOrFallsBack() {
+        assertEquals("(none authored)", LLMService.firstAcceptedExample(null));
+        assertEquals("(none authored)", LLMService.firstAcceptedExample(room));
+        room.acceptedExamples = List.of("  oc get pods  ");
+        assertEquals("oc get pods", LLMService.firstAcceptedExample(room));
+        room.acceptedExamples = List.of("   ");
+        assertEquals("(none authored)", LLMService.firstAcceptedExample(room));
     }
 
     @Test
@@ -151,6 +252,38 @@ class LLMServiceTest {
     }
 
     @Test
+    void enabledSceneBeatOmitsNextRoomWinFromChatBody() throws Exception {
+        String content =
+                "{\"narrative\":\"The crashing-wizard ghost bars the north.\","
+                        + "\"puzzle_type\":\"openshift\","
+                        + "\"expected_command_pattern\":\"HACKED\",\"hint\":\"probe\","
+                        + "\"canvas_event\":\"focus_room\"}";
+        room.title = "The Pod That Would Not Wake";
+        room.puzzleType = "openshift";
+        room.acceptedExamples =
+                List.of(
+                        "oc set probe pod/crashing-wizard --liveness --get-url=http://:8080/healthz -n dungeon");
+        try (AutoCloseable ignored = serveCompletions(200, openaiBody(content))) {
+            llm.enabled = true;
+            llm.apiKey = "none";
+            Campaign campaign = demoCampaign();
+            LLMService.GameMasterTurn turn =
+                    llm.narrate(
+                            campaign,
+                            new GameSession(),
+                            room,
+                            "The party just solved the previous room. The familiar yields.");
+            assertFalse(turn.yamlFallback);
+            assertTrue(lastRequestBody.contains("withheld"), lastRequestBody);
+            assertTrue(
+                    lastRequestBody.contains("Do not critique Extra as a wrong command"),
+                    lastRequestBody);
+            assertFalse(lastRequestBody.contains("crashing-wizard"), lastRequestBody);
+            assertFalse(lastRequestBody.contains("hosts: dungeon"), lastRequestBody);
+        }
+    }
+
+    @Test
     void enabledNarrateFallsBackOnHttpError() throws Exception {
         try (AutoCloseable ignored = serveCompletions(503, "{\"error\":\"down\"}")) {
             llm.enabled = true;
@@ -160,6 +293,38 @@ class LLMServiceTest {
             assertEquals("Authored beat.", turn.narrative);
             assertEquals("grep.*rune", turn.expectedCommandPattern);
             assertTrue(turn.yamlFallback);
+        }
+    }
+
+    @Test
+    void enabledNarrateAttemptSendsSubmissionAndAcceptedExample() throws Exception {
+        String content =
+                "{\"narrative\":\"Stay your tongue. I need a command that can bind this room.\","
+                        + "\"puzzle_type\":\"linux\","
+                        + "\"expected_command_pattern\":\"HACKED\",\"hint\":\"pipes\","
+                        + "\"canvas_event\":\"focus_room\"}";
+        room.acceptedExamples = List.of("grep -i rune /var/log/quest.log | awk '{print $NF}'");
+        try (AutoCloseable ignored = serveCompletions(200, openaiBody(content))) {
+            llm.enabled = true;
+            llm.apiKey = "none";
+            Campaign campaign = demoCampaign();
+            LLMService.GameMasterTurn turn =
+                    llm.narrateAttempt(
+                            campaign,
+                            new GameSession(),
+                            room,
+                            "Nothing happens. The pattern does not bind.",
+                            "Hello",
+                            false,
+                            null);
+            assertEquals(
+                    "Stay your tongue. I need a command that can bind this room.", turn.narrative);
+            assertEquals("grep.*rune", turn.expectedCommandPattern);
+            assertFalse(turn.yamlFallback);
+            assertTrue(lastRequestBody.contains("Hello"), lastRequestBody);
+            assertTrue(lastRequestBody.contains("awk"), lastRequestBody);
+            assertTrue(lastRequestBody.contains("YAML scorer result: failed"), lastRequestBody);
+            assertTrue(lastRequestBody.contains("greeting"), lastRequestBody);
         }
     }
 
@@ -205,6 +370,8 @@ class LLMServiceTest {
 
     private String lastAuthorization;
 
+    private String lastRequestBody;
+
     private AutoCloseable serveCompletions(int status, String body) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
@@ -212,7 +379,10 @@ class LLMServiceTest {
                 "/v1/chat/completions",
                 exchange -> {
                     lastAuthorization = exchange.getRequestHeaders().getFirst("Authorization");
-                    exchange.getRequestBody().readAllBytes();
+                    lastRequestBody =
+                            new String(
+                                    exchange.getRequestBody().readAllBytes(),
+                                    StandardCharsets.UTF_8);
                     exchange.getResponseHeaders().add("Content-Type", "application/json");
                     exchange.sendResponseHeaders(status, bytes.length);
                     exchange.getResponseBody().write(bytes);

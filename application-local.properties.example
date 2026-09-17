@@ -6,6 +6,9 @@
 # endpoint while %test (./mvnw test / verify) stays YAML-only.
 #
 # Cluster / workshop runtime is still vLLM + Granite 3.2 8B Instruct on NVIDIA L4.
+# For a workshop MaaS /v1/chat/completions gateway: set base-url to that host's /v1,
+# model to the gateway's Granite id, and api-key to the Bearer token from the UI.
+# Never paste workshop hostnames or tokens into git.
 
 %dev.questshift.llm.enabled=true
 %dev.questshift.llm.base-url=http://127.0.0.1:18000/v1
