@@ -81,7 +81,16 @@ public class Campaign {
         @JsonProperty("accepted_examples")
         public List<String> acceptedExamples = new ArrayList<>();
 
+        @JsonProperty("miss_beats")
+        public List<MissBeat> missBeats = new ArrayList<>();
+
         public List<Clue> clues = new ArrayList<>();
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class MissBeat {
+        public String pattern;
+        public String message;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

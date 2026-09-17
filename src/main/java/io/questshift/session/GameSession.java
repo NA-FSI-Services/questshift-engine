@@ -36,6 +36,7 @@ public class GameSession {
         public int mapX;
         public int mapY;
         public String viewedRoomId = "";
+        public List<String> foundClues = new ArrayList<>();
 
         public PartyMember() {}
 

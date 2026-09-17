@@ -34,6 +34,28 @@ class CommandEvaluatorTest {
     }
 
     @Test
+    void linuxNameOnlyIsAnAuthoredGolemMiss() {
+        Campaign.Room room = campaign.roomById("room-01-broken-shell");
+        assertNotNull(room);
+        var result = evaluator.evaluate(new GameSession(), room, "THORN");
+        assertFalse(result.passed());
+        assertTrue(result.authoredMiss());
+        assertTrue(result.message().toLowerCase(java.util.Locale.ROOT).contains("filesystem"));
+        var alias = evaluator.evaluate(new GameSession(), room, "rune=THORN");
+        assertTrue(alias.authoredMiss());
+    }
+
+    @Test
+    void linuxPartialGrepIsAnAuthoredGolemMiss() {
+        Campaign.Room room = campaign.roomById("room-01-broken-shell");
+        assertNotNull(room);
+        var result = evaluator.evaluate(new GameSession(), room, "grep -i rune /var/log/quest.log");
+        assertFalse(result.passed());
+        assertTrue(result.authoredMiss());
+        assertTrue(result.message().toLowerCase(java.util.Locale.ROOT).contains("too long"));
+    }
+
+    @Test
     void javaSnippetPasses() {
         Campaign.Room room = new Campaign.Room();
         room.puzzleType = "java";

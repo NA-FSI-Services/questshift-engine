@@ -33,6 +33,7 @@ class StateSerializerTest {
         GameSession.PartyMember ada = new GameSession.PartyMember("Ada", "guardian");
         ada.mapX = 120;
         ada.mapY = 276;
+        ada.foundClues.add("shell-log");
         session.partyMembers.add(ada);
         StateSerializer serializer = new StateSerializer();
         GameSession restored = serializer.fromYaml(serializer.toYaml(session));
@@ -47,6 +48,7 @@ class StateSerializerTest {
         assertEquals(List.of("shell-log"), restored.foundClues);
         assertEquals(120, restored.partyMembers.getFirst().mapX);
         assertEquals(276, restored.partyMembers.getFirst().mapY);
+        assertEquals(List.of("shell-log"), restored.partyMembers.getFirst().foundClues);
     }
 
     @Test

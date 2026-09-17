@@ -30,5 +30,6 @@ class GameSessionTest {
         GameSession.PartyMember member = new GameSession.PartyMember("Ada", "guardian");
         assertEquals("Ada", member.name);
         assertEquals("guardian", member.seatId);
+        assertTrue(member.foundClues.isEmpty());
     }
 }

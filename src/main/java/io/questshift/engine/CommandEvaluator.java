@@ -33,7 +33,26 @@ public class CommandEvaluator {
         if (softMatch(room.puzzleType, command)) {
             return Evaluation.pass("Close enough. The pattern holds.");
         }
+        String miss = missBeatMessage(room, command);
+        if (miss != null) {
+            return Evaluation.missBeat(miss);
+        }
         return Evaluation.fail("Nothing happens. The pattern does not bind.");
+    }
+
+    private String missBeatMessage(Campaign.Room room, String command) {
+        if (room.missBeats == null) {
+            return null;
+        }
+        for (Campaign.MissBeat beat : room.missBeats) {
+            if (beat == null || beat.pattern == null || beat.message == null) {
+                continue;
+            }
+            if (matchesPattern(beat.pattern, command)) {
+                return beat.message.strip();
+            }
+        }
+        return null;
     }
 
     private boolean matchesPattern(String regex, String command) {
@@ -96,13 +115,17 @@ public class CommandEvaluator {
         return value.replace("\r\n", "\n").replace('\t', ' ').strip().replaceAll(" +", " ");
     }
 
-    public record Evaluation(boolean passed, String message) {
+    public record Evaluation(boolean passed, String message, boolean authoredMiss) {
         public static Evaluation pass(String message) {
-            return new Evaluation(true, message);
+            return new Evaluation(true, message, false);
         }
 
         public static Evaluation fail(String message) {
-            return new Evaluation(false, message);
+            return new Evaluation(false, message, false);
+        }
+
+        public static Evaluation missBeat(String message) {
+            return new Evaluation(false, message, true);
         }
     }
 }

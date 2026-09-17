@@ -192,6 +192,13 @@ public class SessionService {
             return result;
         }
         session.hintCount++;
+        if (evaluation.authoredMiss()) {
+            session.lastNarrative = evaluation.message();
+            session.lastHint = evaluation.message();
+            session.lastCanvasEvent = "focus_room";
+            result.session = session;
+            return result;
+        }
         GameMasterTurn miss =
                 llm.narrate(
                         campaign,
@@ -225,6 +232,13 @@ public class SessionService {
                 imported.foundClues = new ArrayList<>();
             } else {
                 imported.foundClues = new ArrayList<>(imported.foundClues);
+            }
+            for (GameSession.PartyMember member : imported.partyMembers) {
+                if (member.foundClues == null) {
+                    member.foundClues = new ArrayList<>();
+                } else {
+                    member.foundClues = new ArrayList<>(member.foundClues);
+                }
             }
             refreshStatus(imported);
             Set<String> taken = occupiedJoinCodesExcluding(imported.id);
@@ -287,6 +301,14 @@ public class SessionService {
                 Campaign.Clue clue = PresenceRules.clueInRoom(campaign, viewed, pickup);
                 if (clue == null) {
                     throw new PartyInvalidException("Unknown clue.");
+                }
+                if (member.foundClues == null) {
+                    member.foundClues = new ArrayList<>();
+                }
+                if (!member.foundClues.contains(clue.id)) {
+                    List<String> mine = new ArrayList<>(member.foundClues);
+                    mine.add(clue.id);
+                    member.foundClues = mine;
                 }
                 if (session.foundClues == null) {
                     session.foundClues = new ArrayList<>();

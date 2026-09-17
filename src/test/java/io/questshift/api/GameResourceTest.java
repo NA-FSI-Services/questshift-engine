@@ -1,6 +1,7 @@
 package io.questshift.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
@@ -351,6 +352,37 @@ class GameResourceTest {
     }
 
     @Test
+    void brokenShellNameOnlyUsesAuthoredGolemMiss() {
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("id");
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"THORN\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("passed", equalTo(false))
+                .body("session.currentRoomId", equalTo("room-01-broken-shell"))
+                .body("message", containsString("filesystem"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"command\":\"grep -i rune /var/log/quest.log\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("passed", equalTo(false))
+                .body("message", containsString("too long"));
+    }
+
+    @Test
     void startHonorsCustomParty() {
         given().contentType(ContentType.JSON)
                 .body(
@@ -567,6 +599,7 @@ class GameResourceTest {
                 .body("partyMembers[0].viewedRoomId", equalTo("room-01-broken-shell"))
                 .body("partyMembers[0].mapX", equalTo(450))
                 .body("foundClues", hasItem("shell-log"))
+                .body("partyMembers[0].foundClues", hasItem("shell-log"))
                 .body("currentRoomId", equalTo("room-01-broken-shell"));
         given().contentType(ContentType.JSON)
                 .body(
