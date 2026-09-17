@@ -145,7 +145,15 @@ class GameResourceTest {
                 .then()
                 .statusCode(200)
                 .body("metadata.id", hasItem("devops-dungeon"))
-                .body("[0].rooms[0].clues.id", hasItem("shell-log"));
+                .body("[0].rooms[0].clues.id", hasItem("shell-log"))
+                .body(
+                        "[0].rooms.guardian.sprite",
+                        hasItems(
+                                "guardian_shell",
+                                "guardian_playbook",
+                                "guardian_pod",
+                                "guardian_servlet",
+                                "guardian_throne"));
     }
 
     @Test

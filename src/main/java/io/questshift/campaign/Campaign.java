@@ -53,6 +53,7 @@ public class Campaign {
         public String puzzleType;
 
         public int estimatedMinutes;
+        public Guardian guardian;
         public String narrative;
         public String prompt;
 
@@ -85,6 +86,13 @@ public class Campaign {
         public List<MissBeat> missBeats = new ArrayList<>();
 
         public List<Clue> clues = new ArrayList<>();
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class Guardian {
+        public String id;
+        public String title;
+        public String sprite;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
