@@ -46,10 +46,6 @@ public class SessionService {
     public GameSession start(String campaignId, List<GameSession.PartyMember> party) {
         partyLock.lock();
         try {
-            GameSession live = findLiveParty();
-            if (live != null) {
-                throw new PartyActiveException(live.joinCode);
-            }
             Campaign campaign =
                     campaignId == null || campaignId.isBlank()
                             ? campaigns.defaultCampaign()
@@ -97,6 +93,43 @@ public class SessionService {
             members.add(member);
             session.partyMembers = members;
             return session;
+        } finally {
+            partyLock.unlock();
+        }
+    }
+
+    public GameSession leave(String sessionId, String name) {
+        partyLock.lock();
+        try {
+            GameSession session = get(sessionId);
+            if (name == null || name.isBlank()) {
+                throw new PartyInvalidException("Alias is required.");
+            }
+            String key = PartyRules.normalizeAlias(name);
+            List<GameSession.PartyMember> members = new ArrayList<>();
+            boolean found = false;
+            for (GameSession.PartyMember existing : session.partyMembers) {
+                if (key.equals(PartyRules.normalizeAlias(existing.name))) {
+                    found = true;
+                    continue;
+                }
+                members.add(existing);
+            }
+            if (found) {
+                session.partyMembers = members;
+            }
+            return session;
+        } finally {
+            partyLock.unlock();
+        }
+    }
+
+    public String delete(String sessionId) {
+        partyLock.lock();
+        try {
+            GameSession session = get(sessionId);
+            unindex(session);
+            return session.id;
         } finally {
             partyLock.unlock();
         }
@@ -194,10 +227,6 @@ public class SessionService {
                 imported.foundClues = new ArrayList<>(imported.foundClues);
             }
             refreshStatus(imported);
-            GameSession live = findLiveParty();
-            if (isLive(imported) && live != null && !live.id.equals(imported.id)) {
-                throw new PartyActiveException(live.joinCode);
-            }
             Set<String> taken = occupiedJoinCodesExcluding(imported.id);
             String wanted = JoinCodes.normalize(imported.joinCode);
             if (!JoinCodes.isJoinCode(wanted) || taken.contains(wanted)) {
@@ -294,18 +323,11 @@ public class SessionService {
         byJoinCode.put(JoinCodes.normalize(session.joinCode), session);
     }
 
-    private GameSession findLiveParty() {
-        for (GameSession session : sessions.values()) {
-            refreshStatus(session);
-            if (isLive(session)) {
-                return session;
-            }
+    private void unindex(GameSession session) {
+        sessions.remove(session.id);
+        if (session.joinCode != null) {
+            byJoinCode.remove(JoinCodes.normalize(session.joinCode), session);
         }
-        return null;
-    }
-
-    private boolean isLive(GameSession session) {
-        return "active".equals(session.status);
     }
 
     private void refreshStatus(GameSession session) {

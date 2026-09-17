@@ -16,4 +16,4 @@ Read this repo's `AGENTS.md`, then essentials.
 - API: https://github.com/NA-FSI-Services/questshift/blob/main/docs/API-CONTRACT.md
   Local: `/Users/dtorresf/Documents/GitHub/na-fsi-services/questshift/questshift/docs/API-CONTRACT.md`
 
-Quarkus 3 + Java 21, `io.questshift.*`. `%dev` disables the LLM. Never execute player commands. YAML regex wins. No native image, Ollama, or new routes. Keep `questshift.llm.api-key=none` in git.
+Quarkus 3 + Java 21, `io.questshift.*`. `%dev` disables the LLM. Never execute player commands. YAML regex wins. No native image or Ollama. Keep `questshift.llm.api-key=none` in git.

@@ -3,13 +3,13 @@ package io.questshift.api;
 import io.questshift.campaign.Campaign;
 import io.questshift.campaign.CampaignLibrary;
 import io.questshift.session.GameSession;
-import io.questshift.session.PartyActiveException;
 import io.questshift.session.PartyConflictException;
 import io.questshift.session.PartyInvalidException;
 import io.questshift.session.SessionService;
 import io.questshift.session.SessionService.CommandResult;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -46,8 +46,6 @@ public class GameResource {
         StartRequest body = request == null ? new StartRequest() : request;
         try {
             return sessions.start(body.campaignId, body.party);
-        } catch (PartyActiveException e) {
-            throw conflict(e, e.getJoinCode(), "party_active", e.getMessage());
         } catch (PartyConflictException e) {
             throw conflict(e, null, e.getErrorCode(), e.getMessage());
         } catch (PartyInvalidException e) {
@@ -71,6 +69,28 @@ public class GameResource {
         } catch (PartyInvalidException e) {
             throw invalidParty(e);
         }
+    }
+
+    @DELETE
+    @Path("/sessions/{id}/party")
+    @Consumes(MediaType.WILDCARD)
+    public GameSession leave(@PathParam("id") String id, @QueryParam("name") String name) {
+        try {
+            GameSession session = sessions.leave(id, name);
+            fanOut.fanOut(session.id, sessions.export(session.id, "json"));
+            return session;
+        } catch (PartyInvalidException e) {
+            throw invalidParty(e);
+        }
+    }
+
+    @DELETE
+    @Path("/sessions/{id}")
+    @Consumes(MediaType.WILDCARD)
+    public Response delete(@PathParam("id") String id) {
+        String canonical = sessions.delete(id);
+        fanOut.drop(canonical);
+        return Response.noContent().build();
     }
 
     @POST
@@ -117,11 +137,7 @@ public class GameResource {
         MediaType.WILDCARD
     })
     public GameSession restore(String body, @QueryParam("format") String format) {
-        try {
-            return sessions.restoreRaw(body, format);
-        } catch (PartyActiveException e) {
-            throw conflict(e, e.getJoinCode(), "party_active", e.getMessage());
-        }
+        return sessions.restoreRaw(body, format);
     }
 
     private static WebApplicationException conflict(

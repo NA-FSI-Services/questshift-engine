@@ -79,6 +79,32 @@ class LLMServiceTest {
     }
 
     @Test
+    void parseTurnExtractsNarrativeFromInvalidRegexEscapes() {
+        String content =
+                "{\"narrative\":\"A shell golem blocks the gate.\","
+                        + "\"puzzle_type\":\"linux\","
+                        + "\"expected_command_pattern\":\"(?s).*awk.*\\$NF.*\","
+                        + "\"hint\":\"Use grep.\","
+                        + "\"canvas_event\":\"focus_room\"}";
+        LLMService.GameMasterTurn turn = llm.parseTurn(content, room);
+        assertEquals("A shell golem blocks the gate.", turn.narrative);
+        assertEquals("linux", turn.puzzleType);
+        assertEquals("Use grep.", turn.hint);
+        assertEquals("grep.*rune", turn.expectedCommandPattern);
+        assertFalse(turn.narrative.contains("expected_command_pattern"));
+        assertFalse(turn.yamlFallback);
+    }
+
+    @Test
+    void parseTurnDoesNotDumpGmJsonWhenNarrativeIsMissing() {
+        LLMService.GameMasterTurn turn =
+                llm.parseTurn("{\"puzzle_type\":\"linux\",\"canvas_event\":\"focus_room\"}", room);
+        assertEquals("Authored beat.", turn.narrative);
+        assertFalse(turn.narrative.contains("canvas_event"));
+        assertFalse(turn.yamlFallback);
+    }
+
+    @Test
     void chatResponseFirstContent() {
         LLMService.ChatResponse response = new LLMService.ChatResponse();
         assertNull(response.firstContent());

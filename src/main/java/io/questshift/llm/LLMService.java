@@ -95,8 +95,8 @@ public class LLMService {
             return null;
         }
         String json = extractJson(content);
-        try {
-            JsonNode node = mapper.readTree(json);
+        JsonNode node = readGmJson(json);
+        if (node != null) {
             GameMasterTurn turn = new GameMasterTurn();
             turn.narrative = text(node, "narrative", room.narrative);
             turn.puzzleType = text(node, "puzzle_type", room.puzzleType);
@@ -105,13 +105,78 @@ public class LLMService {
             turn.canvasEvent = text(node, "canvas_event", "focus_room");
             turn.yamlFallback = false;
             return turn;
-        } catch (Exception e) {
-            LOG.debug("Could not parse Game Master JSON, wrapping raw text");
-            GameMasterTurn turn = fallbackTurn(room, null);
-            turn.narrative = content;
-            turn.yamlFallback = false;
-            return turn;
         }
+        LOG.debug("Could not parse Game Master JSON; using narrative only");
+        GameMasterTurn turn = fallbackTurn(room, null);
+        String prose = extractNarrativeField(content);
+        if (prose != null) {
+            turn.narrative = prose;
+        } else if (!looksLikeGmJson(content)) {
+            turn.narrative = content;
+        }
+        turn.yamlFallback = false;
+        return turn;
+    }
+
+    private JsonNode readGmJson(String json) {
+        try {
+            return mapper.readTree(json);
+        } catch (Exception ignored) {
+            try {
+                // Granite copies YAML regexes and emits invalid JSON escapes such as \$.
+                return mapper.readTree(json.replace("\\$", "$"));
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+
+    static String extractNarrativeField(String content) {
+        if (content == null) {
+            return null;
+        }
+        String key = "\"narrative\"";
+        int keyAt = content.indexOf(key);
+        if (keyAt < 0) {
+            return null;
+        }
+        int colon = content.indexOf(':', keyAt + key.length());
+        int quote = content.indexOf('"', colon + 1);
+        if (colon < 0 || quote < 0) {
+            return null;
+        }
+        StringBuilder prose = new StringBuilder();
+        for (int i = quote + 1; i < content.length(); i++) {
+            char c = content.charAt(i);
+            if (c == '\\' && i + 1 < content.length()) {
+                char next = content.charAt(++i);
+                prose.append(
+                        switch (next) {
+                            case 'n' -> '\n';
+                            case 't' -> '\t';
+                            case 'r' -> '\r';
+                            case '"' -> '"';
+                            case '\\' -> '\\';
+                            case '/' -> '/';
+                            default -> next;
+                        });
+                continue;
+            }
+            if (c == '"') {
+                String trimmed = prose.toString().trim();
+                return trimmed.isEmpty() ? null : trimmed;
+            }
+            prose.append(c);
+        }
+        return null;
+    }
+
+    static boolean looksLikeGmJson(String content) {
+        String src = content.strip();
+        return src.startsWith("{")
+                && (src.contains("\"puzzle_type\"")
+                        || src.contains("\"expected_command_pattern\"")
+                        || src.contains("\"canvas_event\""));
     }
 
     private GameMasterTurn fallbackTurn(Campaign.Room room, String extra) {

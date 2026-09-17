@@ -11,7 +11,7 @@ Read `AGENTS.md` first (this repo), then the docs-repo map.
 - vLLM only (Granite 3.2 8B Instruct). `%dev` keeps LLM **disabled**. No Ollama.
 - Campaign YAML wins. LLM narrates only. Fallback to YAML if vLLM is down.
 - Never execute player `oc` / Ansible / Linux / Java against the cluster.
-- One party per process. Seats are cosmetic.
-- Match existing REST/WebSocket; do not invent endpoints.
-- v1 non-goals: TTS, multi-party, real command execution.
+- Many parties per process. Seats are cosmetic.
+- Match REST/WebSocket named in API-CONTRACT.md.
+- v1 non-goals: TTS, extra Routes, real command execution.
 - Never commit API keys. `questshift.llm.api-key` stays `none` in git. Local overlay: gitignored `application-local.properties` (copy from `application-local.properties.example`). Committed model stays `ibm-granite/granite-3.2-8b-instruct`.

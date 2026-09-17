@@ -64,4 +64,11 @@ public class SessionFanOut {
             send(socket, payload);
         }
     }
+
+    public void drop(String sessionId) {
+        if (sessionId == null || sessionId.isBlank()) {
+            return;
+        }
+        sockets.remove(sessionId);
+    }
 }

@@ -4,6 +4,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -152,8 +153,8 @@ class GameResourceTest {
     }
 
     @Test
-    void secondStartIsConflictUntilTheHourEnds() {
-        String joinCode =
+    void secondStartCreatesAnotherParty() {
+        String first =
                 given().contentType(ContentType.JSON)
                         .body(ADA_PARTY)
                         .when()
@@ -162,14 +163,30 @@ class GameResourceTest {
                         .statusCode(200)
                         .extract()
                         .path("joinCode");
-        given().contentType(ContentType.JSON)
-                .body(ADA_PARTY)
-                .when()
-                .post("/api/sessions")
+        String second =
+                given().contentType(ContentType.JSON)
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Linus\",\"seatId\":\"automancer\"}]}")
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("joinCode");
+        assertNotNull(first);
+        assertNotNull(second);
+        assertFalse(first.equals(second));
+        given().when()
+                .get("/api/sessions/" + first)
                 .then()
-                .statusCode(409)
-                .body("error", equalTo("party_active"))
-                .body("joinCode", equalTo(joinCode));
+                .statusCode(200)
+                .body("status", equalTo("active"));
+        given().when()
+                .get("/api/sessions/" + second)
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("active"))
+                .body("partyMembers[0].name", equalTo("Linus"));
     }
 
     @Test
@@ -220,7 +237,7 @@ class GameResourceTest {
     }
 
     @Test
-    void importOfAnActivePartyConflictsWhileOneIsLive() {
+    void importOfAnActivePartySitsBesideALiveHour() {
         given().contentType(ContentType.JSON)
                 .body(ADA_PARTY)
                 .when()
@@ -237,8 +254,43 @@ class GameResourceTest {
                 .when()
                 .post("/api/sessions/import")
                 .then()
-                .statusCode(409)
-                .body("error", equalTo("party_active"));
+                .statusCode(200)
+                .body("id", equalTo("11111111-2222-3333-4444-555555555555"))
+                .body("status", equalTo("active"));
+    }
+
+    @Test
+    void leaveRemovesTheAliasAndDeleteDropsTheParty() {
+        String joinCode =
+                given().contentType(ContentType.JSON)
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"},{\"name\":\"Linus\",\"seatId\":\"automancer\"}]}")
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("joinCode");
+        given().queryParam("name", "Ada")
+                .when()
+                .delete("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(200)
+                .body("partyMembers.name", hasItem("Linus"))
+                .body("partyMembers.name", not(hasItem("Ada")));
+        given().queryParam("name", "Nobody")
+                .when()
+                .delete("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(200)
+                .body("partyMembers.name", hasItem("Linus"));
+        given().when()
+                .delete("/api/sessions/" + joinCode + "/party")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_party"));
+        given().when().delete("/api/sessions/" + joinCode).then().statusCode(204);
+        given().when().get("/api/sessions/" + joinCode).then().statusCode(404);
     }
 
     @Test

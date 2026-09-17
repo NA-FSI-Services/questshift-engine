@@ -59,6 +59,19 @@ class SessionFanOutTest {
         hub.fanOut("s1", null);
     }
 
+    @Test
+    void dropRemovesEverySocketForThatHour() {
+        SessionFanOut hub = new SessionFanOut();
+        List<String> inbox = new ArrayList<>();
+        Session socket = fakeSocket(inbox, new AtomicBoolean(true));
+        hub.attach(socket, "s1");
+        hub.drop("s1");
+        hub.fanOut("s1", "after-drop");
+        assertTrue(inbox.isEmpty());
+        hub.drop(null);
+        hub.drop(" ");
+    }
+
     private static Session fakeSocket(List<String> inbox, AtomicBoolean open) {
         Map<String, Object> props = new HashMap<>();
         ClassLoader loader = Thread.currentThread().getContextClassLoader();

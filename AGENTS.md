@@ -19,7 +19,7 @@ API shapes:
 
 Quarkus 3.39 / Java 21. Package `io.questshift.{api,campaign,engine,llm,session}`. `%dev` sets `questshift.llm.enabled=false`. Campaigns load from `../questshift-campaigns/campaigns` (sibling) or classpath `campaigns/campaign-devops-dungeon.yaml`.
 
-- Do not add routes beyond `GameResource` / `GameSocket`.
+- Keep REST/WebSocket on `GameResource` / `GameSocket` (leave and delete are named in API-CONTRACT).
 - Do not execute player commands. `CommandEvaluator` is the only scorer.
 - Keep YAML `expected_command_pattern`; never let the LLM rewrite it.
 - JVM only. No native image. No Ollama client.
