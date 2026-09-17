@@ -103,7 +103,11 @@ class GameResourceTest {
                 .body("puzzleCompletion.room-02-playbook-of-binding", equalTo(true))
                 .body("puzzleCompletion.room-03-pod-that-would-not-wake", equalTo(true))
                 .body("puzzleCompletion.room-04-cursed-servlet", equalTo(true))
-                .body("puzzleCompletion.room-05-operators-throne", equalTo(true));
+                .body("puzzleCompletion.room-05-operators-throne", equalTo(true))
+                .body("adventureSummary.mostCommands", equalTo("Ada"))
+                .body("adventureSummary.stages.size()", equalTo(5))
+                .body("adventureSummary.prose", containsString("The hour is complete"))
+                .body("adventureSummary.prose", containsString("The Operator's Throne — Ada"));
 
         String yaml =
                 given().when()
@@ -300,6 +304,34 @@ class GameResourceTest {
                 .body("error", equalTo("invalid_party"));
         given().when().delete("/api/sessions/" + joinCode).then().statusCode(204);
         given().when().get("/api/sessions/" + joinCode).then().statusCode(404);
+    }
+
+    @Test
+    void completeHourFreezesClockAndRejectsFurtherCommands() {
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(ADA_PARTY)
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("id");
+        GameSession live = sessions.get(sessionId);
+        live.status = "complete";
+        live.elapsedSeconds = 42;
+        live.startedAt = Instant.now().minusSeconds(90);
+        GameSession frozen = sessions.get(sessionId);
+        assertEquals("complete", frozen.status);
+        assertEquals(42, frozen.elapsedSeconds);
+        assertNotNull(frozen.adventureSummary);
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"Hello\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(409)
+                .body("error", equalTo("party_not_active"));
     }
 
     @Test

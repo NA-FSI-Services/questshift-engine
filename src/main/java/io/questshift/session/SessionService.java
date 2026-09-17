@@ -149,6 +149,9 @@ public class SessionService {
 
     public CommandResult submit(String sessionId, String command, String seatId, String name) {
         GameSession session = get(sessionId);
+        if (!"active".equals(session.status)) {
+            throw new PartyConflictException("party_not_active", "This hour is no longer active.");
+        }
         Campaign campaign = campaigns.require(session.campaignId);
         Campaign.Room room = campaign.roomById(session.currentRoomId);
         CommandEvaluator.Evaluation evaluation = evaluator.evaluate(session, room, command);
@@ -182,6 +185,7 @@ public class SessionService {
             if (next == null) {
                 session.status = "complete";
                 session.currentRoomId = room.id;
+                session.adventureSummary = AdventureSummarizer.summarize(campaign, session);
                 turn =
                         llm.narrateAttempt(
                                 campaign,
@@ -364,6 +368,10 @@ public class SessionService {
     }
 
     private void refreshStatus(GameSession session) {
+        if ("complete".equals(session.status) || "expired".equals(session.status)) {
+            fillSummary(session);
+            return;
+        }
         session.tickElapsed();
         if (!"active".equals(session.status) || session.campaignId == null) {
             return;
@@ -379,6 +387,19 @@ public class SessionService {
         }
         if (session.elapsedSeconds >= minutes * 60L) {
             session.status = "expired";
+            session.elapsedSeconds = minutes * 60L;
+        }
+    }
+
+    private void fillSummary(GameSession session) {
+        if (!"complete".equals(session.status) || session.adventureSummary != null) {
+            return;
+        }
+        try {
+            session.adventureSummary =
+                    AdventureSummarizer.summarize(campaigns.require(session.campaignId), session);
+        } catch (IllegalArgumentException ignored) {
+            session.adventureSummary = AdventureSummarizer.summarize(null, session);
         }
     }
 

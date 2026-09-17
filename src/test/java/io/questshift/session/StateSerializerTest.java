@@ -30,6 +30,15 @@ class StateSerializerTest {
         attempt.message = "miss";
         session.commandLog.add(attempt);
         session.foundClues.add("shell-log");
+        session.status = "complete";
+        session.elapsedSeconds = 42;
+        GameSession.AdventureSummary recap = new GameSession.AdventureSummary();
+        recap.mostQuestions = "Ada";
+        recap.mostQuestionsCount = 1;
+        recap.mostCommands = "Ada";
+        recap.mostCommandsCount = 1;
+        recap.prose = "The hour is complete.";
+        session.adventureSummary = recap;
         GameSession.PartyMember ada = new GameSession.PartyMember("Ada", "guardian");
         ada.mapX = 120;
         ada.mapY = 276;
@@ -45,6 +54,10 @@ class StateSerializerTest {
         assertEquals(1, restored.commandLog.size());
         assertEquals("Ada", restored.commandLog.getFirst().name);
         assertEquals("cat /var/log/quest.log", restored.commandLog.getFirst().command);
+        assertEquals("complete", restored.status);
+        assertEquals(42, restored.elapsedSeconds);
+        assertEquals("Ada", restored.adventureSummary.mostQuestions);
+        assertEquals("The hour is complete.", restored.adventureSummary.prose);
         assertEquals(List.of("shell-log"), restored.foundClues);
         assertEquals(120, restored.partyMembers.getFirst().mapX);
         assertEquals(276, restored.partyMembers.getFirst().mapY);

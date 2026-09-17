@@ -30,7 +30,7 @@ public class StateSerializer {
 
     public String toJson(GameSession session) {
         try {
-            session.tickElapsed();
+            freezeElapsed(session);
             return json.writerWithDefaultPrettyPrinter().writeValueAsString(session);
         } catch (IOException e) {
             throw new IllegalStateException("JSON export failed", e);
@@ -39,7 +39,7 @@ public class StateSerializer {
 
     public String toYaml(GameSession session) {
         try {
-            session.tickElapsed();
+            freezeElapsed(session);
             return yaml.writeValueAsString(session);
         } catch (IOException e) {
             throw new IllegalStateException("YAML export failed", e);
@@ -47,13 +47,23 @@ public class StateSerializer {
     }
 
     public void writeJson(GameSession session, OutputStream out) throws IOException {
-        session.tickElapsed();
+        freezeElapsed(session);
         json.writerWithDefaultPrettyPrinter().writeValue(out, session);
     }
 
     public void writeYaml(GameSession session, OutputStream out) throws IOException {
-        session.tickElapsed();
+        freezeElapsed(session);
         yaml.writeValue(out, session);
+    }
+
+    private static void freezeElapsed(GameSession session) {
+        if (session == null) {
+            return;
+        }
+        if ("complete".equals(session.status) || "expired".equals(session.status)) {
+            return;
+        }
+        session.tickElapsed();
     }
 
     public GameSession fromJson(String body) {

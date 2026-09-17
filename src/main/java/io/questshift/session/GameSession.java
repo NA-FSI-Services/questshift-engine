@@ -26,6 +26,7 @@ public class GameSession {
     public String lastCanvasEvent;
     public List<CommandLogEntry> commandLog = new ArrayList<>();
     public List<String> foundClues = new ArrayList<>();
+    public AdventureSummary adventureSummary;
 
     /** True when the last GM turn used campaign YAML because vLLM was off or unreachable. */
     public boolean yamlFallback;
@@ -58,7 +59,26 @@ public class GameSession {
         public CommandLogEntry() {}
     }
 
+    /** Recap shown when the throne is cleared. Counts come from commandLog. */
+    public static class AdventureSummary {
+        public String mostQuestions;
+        public int mostQuestionsCount;
+        public String mostCommands;
+        public int mostCommandsCount;
+        public List<StageClear> stages = new ArrayList<>();
+        public String prose;
+    }
+
+    public static class StageClear {
+        public String roomId;
+        public String roomTitle;
+        public String name;
+    }
+
     public void tickElapsed() {
+        if ("complete".equals(status) || "expired".equals(status)) {
+            return;
+        }
         elapsedSeconds = Math.max(0, Instant.now().getEpochSecond() - startedAt.getEpochSecond());
     }
 }

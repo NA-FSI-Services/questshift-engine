@@ -112,7 +112,11 @@ public class GameResource {
     @Path("/sessions/{id}/commands")
     public CommandResult command(@PathParam("id") String id, CommandRequest request) {
         CommandRequest body = request == null ? new CommandRequest() : request;
-        return sessions.submit(id, body.command, body.seatId, body.name);
+        try {
+            return sessions.submit(id, body.command, body.seatId, body.name);
+        } catch (PartyConflictException e) {
+            throw conflict(e, null, e.getErrorCode(), e.getMessage());
+        }
     }
 
     @GET

@@ -17,6 +17,23 @@ class GameSessionTest {
     }
 
     @Test
+    void tickElapsedDoesNotAdvanceCompleteOrExpired() {
+        GameSession done = new GameSession();
+        done.status = "complete";
+        done.elapsedSeconds = 42;
+        done.startedAt = Instant.now().minusSeconds(90);
+        done.tickElapsed();
+        assertEquals(42, done.elapsedSeconds);
+
+        GameSession expired = new GameSession();
+        expired.status = "expired";
+        expired.elapsedSeconds = 3600;
+        expired.startedAt = Instant.now().minusSeconds(4000);
+        expired.tickElapsed();
+        assertEquals(3600, expired.elapsedSeconds);
+    }
+
+    @Test
     void defaultPartyFieldsAreEmptyCollections() {
         GameSession session = new GameSession();
         assertEquals("active", session.status);
