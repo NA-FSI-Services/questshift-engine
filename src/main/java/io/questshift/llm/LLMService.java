@@ -22,6 +22,11 @@ import org.jboss.logging.Logger;
 public class LLMService {
 
     private static final int HTTP_ERROR_STATUS = 300;
+
+    private static final char JSON_QUOTE = '"';
+
+    private static final char JSON_ESCAPE = '\\';
+
     private static final Logger LOG = Logger.getLogger(LLMService.class);
 
     @ConfigProperty(name = "questshift.llm.base-url")
@@ -141,34 +146,39 @@ public class LLMService {
             return null;
         }
         int colon = content.indexOf(':', keyAt + key.length());
-        int quote = content.indexOf('"', colon + 1);
+        int quote = content.indexOf(JSON_QUOTE, colon + 1);
         if (colon < 0 || quote < 0) {
             return null;
         }
         StringBuilder prose = new StringBuilder();
-        for (int i = quote + 1; i < content.length(); i++) {
+        int i = quote + 1;
+        while (i < content.length()) {
             char c = content.charAt(i);
-            if (c == '\\' && i + 1 < content.length()) {
-                char next = content.charAt(++i);
-                prose.append(
-                        switch (next) {
-                            case 'n' -> '\n';
-                            case 't' -> '\t';
-                            case 'r' -> '\r';
-                            case '"' -> '"';
-                            case '\\' -> '\\';
-                            case '/' -> '/';
-                            default -> next;
-                        });
+            i++;
+            if (c == JSON_ESCAPE && i < content.length()) {
+                prose.append(unescapeJson(content.charAt(i)));
+                i++;
                 continue;
             }
-            if (c == '"') {
+            if (c == JSON_QUOTE) {
                 String trimmed = prose.toString().trim();
                 return trimmed.isEmpty() ? null : trimmed;
             }
             prose.append(c);
         }
         return null;
+    }
+
+    private static char unescapeJson(char next) {
+        return switch (next) {
+            case 'n' -> '\n';
+            case 't' -> '\t';
+            case 'r' -> '\r';
+            case '"' -> '"';
+            case '\\' -> '\\';
+            case '/' -> '/';
+            default -> next;
+        };
     }
 
     static boolean looksLikeGmJson(String content) {
