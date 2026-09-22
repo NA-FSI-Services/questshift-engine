@@ -30,6 +30,9 @@ class PresenceRulesTest {
     @Test
     void clueMustBelongToTheViewedRoom() {
         Campaign campaign = new Campaign();
+        Campaign.Clue lobby = new Campaign.Clue();
+        lobby.id = "lobby-hour";
+        campaign.story.clues = List.of(lobby);
         Campaign.Room room = new Campaign.Room();
         room.id = "room-01-broken-shell";
         Campaign.Clue clue = new Campaign.Clue();
@@ -37,8 +40,11 @@ class PresenceRulesTest {
         room.clues = List.of(clue);
         campaign.rooms = List.of(room);
         assertEquals("shell-log", PresenceRules.clueInRoom(campaign, room.id, "shell-log").id);
+        assertEquals("lobby-hour", PresenceRules.clueInRoom(campaign, "", "lobby-hour").id);
+        assertEquals("lobby-hour", PresenceRules.clueInRoom(campaign, null, "lobby-hour").id);
         assertNull(PresenceRules.clueInRoom(campaign, room.id, "missing"));
         assertNull(PresenceRules.clueInRoom(campaign, "", "shell-log"));
+        assertNull(PresenceRules.clueInRoom(campaign, room.id, "lobby-hour"));
         assertNull(PresenceRules.clueInRoom(campaign, "room-02-playbook-of-binding", "shell-log"));
     }
 

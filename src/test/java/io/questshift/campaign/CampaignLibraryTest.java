@@ -19,6 +19,7 @@ class CampaignLibraryTest {
         assertFalse(library.all().isEmpty());
         assertEquals("devops-dungeon", library.require("devops-dungeon").metadata.id);
         assertEquals("guardian_shell", library.defaultCampaign().rooms.get(0).guardian.sprite);
+        assertEquals("lobby-hour", library.defaultCampaign().story.clues.get(0).id);
         assertEquals(
                 5,
                 library.defaultCampaign().rooms.stream()

@@ -1,9 +1,10 @@
 package io.questshift.session;
 
 import io.questshift.campaign.Campaign;
+import java.util.List;
 import java.util.Map;
 
-/** Overworld walk and YAML clue pickup. Does not score puzzles. */
+/** Overworld walk and YAML clue pickup. Does not score puzzles. Lobby clues live on story.clues. */
 public final class PresenceRules {
 
     public static final int SPAWN_SOUTH = 56;
@@ -23,19 +24,30 @@ public final class PresenceRules {
         return Boolean.TRUE.equals(completed.get(roomId));
     }
 
+    /**
+     * Resolve a pickup against the current layer. Empty {@code roomId} is the overworld ({@code
+     * story.clues}). A room id looks only at that room.
+     */
     public static Campaign.Clue clueInRoom(Campaign campaign, String roomId, String clueId) {
-        if (campaign == null
-                || roomId == null
-                || roomId.isBlank()
-                || clueId == null
-                || clueId.isBlank()) {
+        if (campaign == null || clueId == null || clueId.isBlank()) {
             return null;
         }
-        Campaign.Room room = campaign.roomById(roomId);
-        if (room == null || room.clues == null) {
+        String viewed = roomId == null ? "" : roomId.trim();
+        if (viewed.isEmpty()) {
+            return clueById(campaign.story == null ? null : campaign.story.clues, clueId);
+        }
+        Campaign.Room room = campaign.roomById(viewed);
+        if (room == null) {
             return null;
         }
-        for (Campaign.Clue clue : room.clues) {
+        return clueById(room.clues, clueId);
+    }
+
+    private static Campaign.Clue clueById(List<Campaign.Clue> clues, String clueId) {
+        if (clues == null) {
+            return null;
+        }
+        for (Campaign.Clue clue : clues) {
             if (clueId.equals(clue.id)) {
                 return clue;
             }

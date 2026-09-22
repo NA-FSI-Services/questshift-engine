@@ -150,6 +150,7 @@ class GameResourceTest {
                 .statusCode(200)
                 .body("metadata.id", hasItem("devops-dungeon"))
                 .body("[0].rooms[0].clues.id", hasItem("shell-log"))
+                .body("[0].story.clues.id", hasItem("lobby-hour"))
                 .body(
                         "[0].rooms.guardian.sprite",
                         hasItems(
@@ -641,6 +642,41 @@ class GameResourceTest {
                 .body("foundClues", hasItem("shell-log"))
                 .body("partyMembers[0].foundClues", hasItem("shell-log"))
                 .body("currentRoomId", equalTo("room-01-broken-shell"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"name\":\"Ada\",\"mapX\":450,\"mapY\":360,\"viewedRoomId\":\"room-01-broken-shell\",\"pickupClueId\":\"lobby-hour\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_presence"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"name\":\"Ada\",\"mapX\":80,\"mapY\":380,\"viewedRoomId\":\"\",\"pickupClueId\":\"lobby-hour\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(200)
+                .body("partyMembers[0].viewedRoomId", equalTo(""))
+                .body("foundClues", hasItem("lobby-hour"))
+                .body("partyMembers[0].foundClues", hasItem("lobby-hour"))
+                .body("currentRoomId", equalTo("room-01-broken-shell"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"name\":\"Ada\",\"mapX\":80,\"mapY\":380,\"viewedRoomId\":\"\",\"pickupClueId\":\"shell-log\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_presence"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"name\":\"Ada\",\"mapX\":450,\"mapY\":360,\"viewedRoomId\":\"room-01-broken-shell\",\"pickupClueId\":\"play-hosts\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/presence")
+                .then()
+                .statusCode(400)
+                .body("error", equalTo("invalid_presence"));
         given().contentType(ContentType.JSON)
                 .body(
                         "{\"name\":\"Ada\",\"mapX\":450,\"mapY\":360,\"viewedRoomId\":\"room-02-playbook-of-binding\"}")

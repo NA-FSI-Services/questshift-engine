@@ -9,8 +9,10 @@ import java.util.concurrent.CopyOnWriteArraySet;
 
 /**
  * Open {@code /ws/sessions/{sessionId}} sockets, keyed by {@link
- * io.questshift.session.GameSession#id}. Presence REST posts fan the same JSON snapshot to every
- * subscriber; command frames still reply to the sender only.
+ * io.questshift.session.GameSession#id}. REST presence, join, leave, and scored commands fan the
+ * same JSON snapshot to every subscriber so every browser in the party sees walks, the shared
+ * board, and GM prose. WebSocket text frames still reply to the sender only (they cannot hold the
+ * floor).
  */
 @ApplicationScoped
 public class SessionFanOut {

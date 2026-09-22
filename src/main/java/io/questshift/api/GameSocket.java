@@ -11,8 +11,9 @@ import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 
 /**
- * Live gameplay socket. Text frames are player commands; the engine replies with JSON session
- * snapshots. Presence updates fan the same snapshot to every open socket for the party.
+ * Live gameplay socket. Text frames are player commands (seat {@code shared}, not the floor); the
+ * engine replies to the sender with a JSON snapshot. REST presence, join, leave, and scored
+ * commands fan the same snapshot to every open socket for the party.
  */
 @ServerEndpoint("/ws/sessions/{sessionId}")
 public class GameSocket {

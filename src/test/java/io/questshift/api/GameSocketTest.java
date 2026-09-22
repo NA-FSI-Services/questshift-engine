@@ -176,6 +176,44 @@ class GameSocketTest {
         second.socket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
     }
 
+    @Test
+    void commandPostFansSnapshotToEveryOpenSocket() throws Exception {
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"guardian\"}]}")
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .path("id");
+
+        SocketInbox first = openInbox(sessionId);
+        SocketInbox second = openInbox(sessionId);
+        assertTrue(first.opened.await(5, TimeUnit.SECONDS), "first websocket open");
+        assertTrue(second.opened.await(5, TimeUnit.SECONDS), "second websocket open");
+
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"command\":\"cat /var/log/quest.log\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("session.commandLog[0].command", equalTo("cat /var/log/quest.log"))
+                .body("session.commandLog[0].name", equalTo("Ada"));
+
+        assertTrue(first.updated.await(5, TimeUnit.SECONDS), first.last.get());
+        assertTrue(second.updated.await(5, TimeUnit.SECONDS), second.last.get());
+        assertTrue(first.last.get().contains("cat /var/log/quest.log"), first.last.get());
+        assertTrue(second.last.get().contains("cat /var/log/quest.log"), second.last.get());
+        assertTrue(first.last.get().contains("\"commandLog\""), first.last.get());
+        assertTrue(second.last.get().contains("Ada"), second.last.get());
+        first.socket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+        second.socket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+    }
+
     private static SocketInbox openInbox(String sessionId) {
         SocketInbox inbox = new SocketInbox();
         inbox.socket =

@@ -63,7 +63,9 @@ public class GameResource {
     @Path("/sessions/{id}/party")
     public GameSession addParty(@PathParam("id") String id, GameSession.PartyMember member) {
         try {
-            return sessions.addMember(id, member);
+            GameSession session = sessions.addMember(id, member);
+            fanOut.fanOut(session.id, sessions.export(session.id, "json"));
+            return session;
         } catch (PartyConflictException e) {
             throw conflict(e, null, e.getErrorCode(), e.getMessage());
         } catch (PartyInvalidException e) {
@@ -113,7 +115,11 @@ public class GameResource {
     public CommandResult command(@PathParam("id") String id, CommandRequest request) {
         CommandRequest body = request == null ? new CommandRequest() : request;
         try {
-            return sessions.submit(id, body.command, body.seatId, body.name);
+            CommandResult result = sessions.submit(id, body.command, body.seatId, body.name);
+            if (result != null && result.session != null) {
+                fanOut.fanOut(result.session.id, sessions.export(result.session.id, "json"));
+            }
+            return result;
         } catch (PartyConflictException e) {
             throw conflict(e, null, e.getErrorCode(), e.getMessage());
         }

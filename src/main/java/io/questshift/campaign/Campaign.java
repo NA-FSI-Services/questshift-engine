@@ -39,6 +39,7 @@ public class Campaign {
         public String opening;
         public String winCondition;
         public String failCondition;
+        public List<Clue> clues = new ArrayList<>();
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
