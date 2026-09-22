@@ -53,8 +53,11 @@ class LLMServiceTest {
                                 "Nothing happens. The pattern does not bind.",
                                 "Hello",
                                 false,
-                                null));
+                                null,
+                                "Ada"));
         assertTrue(prompt.contains("Hello"), prompt);
+        assertTrue(prompt.contains("Speaker: Ada"), prompt);
+        assertTrue(prompt.contains("Do not invent a traveler"), prompt);
         assertTrue(prompt.contains("awk '{print $NF}'"), prompt);
         assertTrue(prompt.contains("YAML scorer result: failed"), prompt);
         assertTrue(prompt.contains("greeting"), prompt);
@@ -82,6 +85,8 @@ class LLMServiceTest {
                         campaign, new GameSession(), room, LLMService.PromptContext.scene(extra));
         assertTrue(prompt.contains("scene beat, not a scored attempt"), prompt);
         assertTrue(prompt.contains("(none — this is a scene beat)"), prompt);
+        assertTrue(prompt.contains("this scene beat is to the room"), prompt);
+        assertFalse(prompt.contains("Speaker: Ada"), prompt);
         assertTrue(prompt.contains("(withheld — scene beat, not a scored attempt)"), prompt);
         assertTrue(prompt.contains("Do not critique Extra as a wrong command"), prompt);
         assertFalse(prompt.contains("hosts: dungeon"), prompt);
@@ -100,7 +105,8 @@ class LLMServiceTest {
                         "Nothing happens. The pattern does not bind.",
                         "Hello",
                         false,
-                        null);
+                        null,
+                        "Ada");
         assertTrue(turn.yamlFallback);
         assertTrue(turn.narrative.contains("Nothing happens"), turn.narrative);
         assertFalse(turn.narrative.contains("awk"), turn.narrative);
@@ -120,7 +126,8 @@ class LLMServiceTest {
                                 "The golem yields.",
                                 "grep -i rune /var/log/quest.log | awk '{print $NF}'",
                                 true,
-                                "grep -i rune /var/log/quest.log | awk '{print $NF}'"));
+                                "grep -i rune /var/log/quest.log | awk '{print $NF}'",
+                                "Ada"));
         assertTrue(prompt.contains("YAML scorer result: passed"), prompt);
         assertTrue(prompt.contains("Celebrate"), prompt);
         assertTrue(prompt.contains("grep -i rune /var/log/quest.log"), prompt);
@@ -316,12 +323,14 @@ class LLMServiceTest {
                             "Nothing happens. The pattern does not bind.",
                             "Hello",
                             false,
-                            null);
+                            null,
+                            "Linus");
             assertEquals(
                     "Stay your tongue. I need a command that can bind this room.", turn.narrative);
             assertEquals("grep.*rune", turn.expectedCommandPattern);
             assertFalse(turn.yamlFallback);
             assertTrue(lastRequestBody.contains("Hello"), lastRequestBody);
+            assertTrue(lastRequestBody.contains("Speaker: Linus"), lastRequestBody);
             assertTrue(lastRequestBody.contains("awk"), lastRequestBody);
             assertTrue(lastRequestBody.contains("YAML scorer result: failed"), lastRequestBody);
             assertTrue(lastRequestBody.contains("greeting"), lastRequestBody);

@@ -57,8 +57,9 @@ public class LLMService {
     }
 
     /**
-     * Score already ran. Send the player submission plus the intended accepted example so Granite
-     * can give Game Master-tone feedback (including chatter like "Hello") without rewriting YAML.
+     * Score already ran. Send the player submission, the speaker alias, and the intended accepted
+     * example so Granite can address that player (including chatter like "Hello") without rewriting
+     * YAML.
      */
     public GameMasterTurn narrateAttempt(
             Campaign campaign,
@@ -67,12 +68,14 @@ public class LLMService {
             String extra,
             String playerSubmission,
             boolean yamlPassed,
-            String intendedExample) {
+            String intendedExample,
+            String speakerAlias) {
         return narrate(
                 campaign,
                 session,
                 room,
-                PromptContext.attempt(extra, playerSubmission, yamlPassed, intendedExample));
+                PromptContext.attempt(
+                        extra, playerSubmission, yamlPassed, intendedExample, speakerAlias));
     }
 
     private GameMasterTurn narrate(
@@ -254,6 +257,7 @@ public class LLMService {
                 %s
                 Inventory: %s
                 YAML scorer result: %s
+                Speaker: %s
                 Player submission:
                 %s
                 Extra:
@@ -261,6 +265,7 @@ public class LLMService {
 
                 Stay in Game Master voice.
                 YAML already scored; you narrate only.
+                Address the speaker by alias when Speaker is a name. When Speaker says the beat is to the room, do not attribute it to a player. Do not invent a traveler. Do not rewrite the expected command pattern.
                 %s
 
                 Return JSON only:
@@ -278,11 +283,23 @@ public class LLMService {
                         fmtArg(intended),
                         fmtArg(String.valueOf(session.inventory)),
                         yamlScore,
+                        fmtArg(speakerLabel(context)),
                         fmtArg(submission),
                         fmtArg(context.extra() == null ? "" : context.extra()),
                         coaching(context.yamlPassed()),
                         fmtArg(room.puzzleType),
                         fmtArg(room.expectedCommandPattern).replace("\"", "\\\""));
+    }
+
+    private static String speakerLabel(PromptContext context) {
+        if (context.yamlPassed() == null) {
+            return "(none — this scene beat is to the room)";
+        }
+        String alias = context.speakerAlias();
+        if (alias == null || alias.isBlank()) {
+            return "(none)";
+        }
+        return alias.strip();
     }
 
     public static String firstAcceptedExample(Campaign.Room room) {
@@ -308,15 +325,24 @@ public class LLMService {
     }
 
     record PromptContext(
-            String extra, String playerSubmission, Boolean yamlPassed, String intendedExample) {
+            String extra,
+            String playerSubmission,
+            Boolean yamlPassed,
+            String intendedExample,
+            String speakerAlias) {
 
         static PromptContext scene(String extra) {
-            return new PromptContext(extra, null, null, null);
+            return new PromptContext(extra, null, null, null, null);
         }
 
         static PromptContext attempt(
-                String extra, String playerSubmission, boolean yamlPassed, String intendedExample) {
-            return new PromptContext(extra, playerSubmission, yamlPassed, intendedExample);
+                String extra,
+                String playerSubmission,
+                boolean yamlPassed,
+                String intendedExample,
+                String speakerAlias) {
+            return new PromptContext(
+                    extra, playerSubmission, yamlPassed, intendedExample, speakerAlias);
         }
     }
 

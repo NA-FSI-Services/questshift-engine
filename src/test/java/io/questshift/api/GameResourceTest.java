@@ -58,6 +58,12 @@ class GameResourceTest {
         assertEquals("active", session.get("status"));
         String narrative = String.valueOf(session.get("lastNarrative"));
         assertTrue(narrative.contains("Torchlight"), narrative);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> gmLog = (List<Map<String, Object>>) session.get("gmLog");
+        assertEquals(1, gmLog.size());
+        assertEquals("room-01-broken-shell", gmLog.getFirst().get("roomId"));
+        assertTrue(String.valueOf(gmLog.getFirst().get("narrative")).contains("Torchlight"));
+        assertFalse(gmLog.getFirst().containsKey("name"));
         assertEquals(Boolean.TRUE, session.get("yamlFallback"));
         assertNotNull(session.get("id"));
         assertTrue(String.valueOf(session.get("joinCode")).matches("[a-z]+-[a-z]+"));
@@ -381,7 +387,8 @@ class GameResourceTest {
                 .body("session.commandLog[0].seatId", equalTo("guardian"))
                 .body("session.commandLog[0].roomId", equalTo("room-01-broken-shell"))
                 .body("session.commandLog[0].passed", equalTo(false))
-                .body("session.commandLog[0].command", equalTo("cat /var/log/quest.log"));
+                .body("session.commandLog[0].command", equalTo("cat /var/log/quest.log"))
+                .body("session.commandLog[0].narrative", containsString("cursed form"));
         given().contentType(ContentType.JSON)
                 .body("{\"command\":\"ls\",\"seatId\":\"guardian\"}")
                 .when()
@@ -389,7 +396,104 @@ class GameResourceTest {
                 .then()
                 .statusCode(200)
                 .body("session.commandLog[1].name", equalTo("Ada"))
-                .body("session.commandLog[1].seatId", equalTo("guardian"));
+                .body("session.commandLog[1].seatId", equalTo("guardian"))
+                .body("session.commandLog[1].narrative", containsString("Nothing happens"));
+    }
+
+    @Test
+    void gmRepliesStayAddressedToTheSpeakerAndSceneBeatsDoNot() {
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(
+                                "{\"campaignId\":\"devops-dungeon\",\"party\":["
+                                        + "{\"name\":\"Ada\",\"seatId\":\"guardian\"},"
+                                        + "{\"name\":\"Linus\",\"seatId\":\"automancer\"}]}")
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .body("gmLog.size()", equalTo(1))
+                        .body("gmLog[0].roomId", equalTo("room-01-broken-shell"))
+                        .body("gmLog[0].narrative", containsString("Torchlight"))
+                        .extract()
+                        .path("id");
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"Hello\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("session.commandLog[0].name", equalTo("Ada"))
+                .body("session.commandLog[0].narrative", containsString("Nothing happens"));
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"THORN\",\"seatId\":\"automancer\",\"name\":\"Linus\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("session.commandLog[1].name", equalTo("Linus"))
+                .body("session.commandLog[1].narrative", containsString("filesystem"))
+                .body("session.gmLog.size()", equalTo(1));
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"ls\",\"seatId\":\"guardian\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("session.commandLog[2].name", equalTo("Ada"))
+                .body("session.commandLog[2].narrative", containsString("Nothing happens"));
+        given().contentType(ContentType.JSON)
+                .body(
+                        "{\"command\":\"grep -i rune /var/log/quest.log | awk '{print $NF}'\","
+                                + "\"seatId\":\"guardian\",\"name\":\"Ada\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(200)
+                .body("passed", equalTo(true))
+                .body("session.currentRoomId", equalTo("room-02-playbook-of-binding"))
+                .body("session.commandLog[3].roomId", equalTo("room-01-broken-shell"))
+                .body("session.commandLog[3].name", equalTo("Ada"))
+                .body("session.commandLog[3].narrative", containsString("The golem cracks"))
+                .body("session.commandLog[3].narrative", not(containsString("bound familiar")))
+                .body("session.gmLog.size()", equalTo(2))
+                .body("session.gmLog[1].roomId", equalTo("room-02-playbook-of-binding"))
+                .body("session.gmLog[1].narrative", containsString("bound familiar"));
+
+        String yaml =
+                given().when()
+                        .get("/api/sessions/" + sessionId + "/export?format=yaml")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .asString();
+        assertTrue(yaml.contains("name: Ada") || yaml.contains("name: \"Ada\""), yaml);
+        assertTrue(yaml.contains("The golem cracks"), yaml);
+
+        Map<?, ?> restored =
+                given().contentType(ContentType.TEXT)
+                        .queryParam("format", "yaml")
+                        .body(yaml)
+                        .when()
+                        .post("/api/sessions/import")
+                        .then()
+                        .statusCode(200)
+                        .extract()
+                        .as(Map.class);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> log = (List<Map<String, Object>>) restored.get("commandLog");
+        assertEquals("Ada", log.get(0).get("name"));
+        assertEquals("Linus", log.get(1).get("name"));
+        assertTrue(String.valueOf(log.get(1).get("narrative")).contains("filesystem"));
+        assertTrue(String.valueOf(log.get(3).get("narrative")).contains("The golem cracks"));
+        assertFalse(String.valueOf(log.get(3).get("narrative")).contains("bound familiar"));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> scenes = (List<Map<String, Object>>) restored.get("gmLog");
+        assertEquals(2, scenes.size());
+        assertFalse(scenes.get(0).containsKey("name"));
+        assertFalse(scenes.get(1).containsKey("name"));
+        assertEquals("room-02-playbook-of-binding", scenes.get(1).get("roomId"));
+        assertTrue(String.valueOf(scenes.get(1).get("narrative")).contains("bound familiar"));
     }
 
     @Test

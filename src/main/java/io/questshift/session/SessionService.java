@@ -62,6 +62,7 @@ public class SessionService {
             campaign.rooms.forEach(room -> session.puzzleCompletion.put(room.id, false));
             GameMasterTurn turn = llm.narrate(campaign, session, first, campaign.story.opening);
             applyTurn(session, turn);
+            recordScene(session, first.id, turn.narrative);
             index(session);
             return session;
         } finally {
@@ -160,7 +161,10 @@ public class SessionService {
         result.message = evaluation.message();
         result.seatId = seatId;
         result.command = command;
-        recordCommand(session, name, seatId, command, evaluation.passed(), evaluation.message());
+        GameSession.CommandLogEntry entry =
+                recordCommand(
+                        session, name, seatId, command, evaluation.passed(), evaluation.message());
+        String speaker = entry == null ? resolveAlias(session, name, seatId) : entry.name;
         if (evaluation.passed()) {
             session.puzzleCompletion.put(room.id, true);
             if (room.loot != null) {
@@ -181,12 +185,11 @@ public class SessionService {
             }
             session.lastCanvasEvent = room.canvasEvent;
             Campaign.Room next = campaign.nextRoom(room.id);
-            GameMasterTurn turn;
             if (next == null) {
                 session.status = "complete";
                 session.currentRoomId = room.id;
                 session.adventureSummary = AdventureSummarizer.summarize(campaign, session);
-                turn =
+                GameMasterTurn turn =
                         llm.narrateAttempt(
                                 campaign,
                                 session,
@@ -194,14 +197,20 @@ public class SessionService {
                                 room.successNarrative,
                                 command,
                                 true,
-                                LLMService.firstAcceptedExample(room));
+                                LLMService.firstAcceptedExample(room),
+                                speaker);
+                applyTurn(session, turn);
+                stampNarrative(entry, turn.narrative);
             } else {
+                // The winning row keeps an addressed success reply. The next
+                // room's opening is a scene beat and is not that player's question.
+                stampNarrative(entry, addressedSuccess(room, evaluation.message()));
                 session.currentRoomId = next.id;
-                // Scene beat for the new room. Do not send the previous winning
-                // command as if it were an attempt at this puzzle.
-                turn = llm.narrate(campaign, session, next, previousRoomSceneExtra(room));
+                GameMasterTurn turn =
+                        llm.narrate(campaign, session, next, previousRoomSceneExtra(room));
+                applyTurn(session, turn);
+                recordScene(session, next.id, turn.narrative);
             }
-            applyTurn(session, turn);
             result.session = session;
             return result;
         }
@@ -210,6 +219,7 @@ public class SessionService {
             session.lastNarrative = evaluation.message();
             session.lastHint = evaluation.message();
             session.lastCanvasEvent = "focus_room";
+            stampNarrative(entry, evaluation.message());
             result.session = session;
             return result;
         }
@@ -221,8 +231,10 @@ public class SessionService {
                         evaluation.message(),
                         command,
                         false,
-                        LLMService.firstAcceptedExample(room));
+                        LLMService.firstAcceptedExample(room),
+                        speaker);
         applyTurn(session, miss);
+        stampNarrative(entry, miss.narrative);
         result.session = session;
         return result;
     }
@@ -242,6 +254,11 @@ public class SessionService {
                 imported.commandLog = new ArrayList<>();
             } else {
                 imported.commandLog = new ArrayList<>(imported.commandLog);
+            }
+            if (imported.gmLog == null) {
+                imported.gmLog = new ArrayList<>();
+            } else {
+                imported.gmLog = new ArrayList<>(imported.gmLog);
             }
             if (imported.foundClues == null) {
                 imported.foundClues = new ArrayList<>();
@@ -421,7 +438,7 @@ public class SessionService {
         return taken;
     }
 
-    private void recordCommand(
+    private GameSession.CommandLogEntry recordCommand(
             GameSession session,
             String name,
             String seatId,
@@ -429,7 +446,7 @@ public class SessionService {
             boolean passed,
             String message) {
         if (command == null || command.isBlank()) {
-            return;
+            return null;
         }
         if (session.commandLog == null) {
             session.commandLog = new ArrayList<>();
@@ -444,6 +461,36 @@ public class SessionService {
         List<GameSession.CommandLogEntry> log = new ArrayList<>(session.commandLog);
         log.add(entry);
         session.commandLog = log;
+        return entry;
+    }
+
+    private static void stampNarrative(GameSession.CommandLogEntry entry, String narrative) {
+        if (entry == null || narrative == null || narrative.isBlank()) {
+            return;
+        }
+        entry.narrative = narrative.strip();
+    }
+
+    private static void recordScene(GameSession session, String roomId, String narrative) {
+        if (session == null || narrative == null || narrative.isBlank()) {
+            return;
+        }
+        if (session.gmLog == null) {
+            session.gmLog = new ArrayList<>();
+        }
+        GameSession.GmLogEntry beat = new GameSession.GmLogEntry();
+        beat.roomId = roomId;
+        beat.narrative = narrative.strip();
+        List<GameSession.GmLogEntry> log = new ArrayList<>(session.gmLog);
+        log.add(beat);
+        session.gmLog = log;
+    }
+
+    private static String addressedSuccess(Campaign.Room room, String evaluatorMessage) {
+        if (room != null && room.successNarrative != null && !room.successNarrative.isBlank()) {
+            return room.successNarrative.strip();
+        }
+        return evaluatorMessage;
     }
 
     static String previousRoomSceneExtra(Campaign.Room solved) {

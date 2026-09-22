@@ -28,7 +28,12 @@ class StateSerializerTest {
         attempt.command = "cat /var/log/quest.log";
         attempt.passed = false;
         attempt.message = "miss";
+        attempt.narrative = "Ada, the golem hates a bare cat.";
         session.commandLog.add(attempt);
+        GameSession.GmLogEntry opening = new GameSession.GmLogEntry();
+        opening.roomId = "room-01-broken-shell";
+        opening.narrative = "Torchlight. A shell golem blocks the gate.";
+        session.gmLog.add(opening);
         session.foundClues.add("shell-log");
         session.status = "complete";
         session.elapsedSeconds = 42;
@@ -54,6 +59,11 @@ class StateSerializerTest {
         assertEquals(1, restored.commandLog.size());
         assertEquals("Ada", restored.commandLog.getFirst().name);
         assertEquals("cat /var/log/quest.log", restored.commandLog.getFirst().command);
+        assertEquals("Ada, the golem hates a bare cat.", restored.commandLog.getFirst().narrative);
+        assertEquals(1, restored.gmLog.size());
+        assertEquals("room-01-broken-shell", restored.gmLog.getFirst().roomId);
+        assertEquals(
+                "Torchlight. A shell golem blocks the gate.", restored.gmLog.getFirst().narrative);
         assertEquals("complete", restored.status);
         assertEquals(42, restored.elapsedSeconds);
         assertEquals("Ada", restored.adventureSummary.mostQuestions);
