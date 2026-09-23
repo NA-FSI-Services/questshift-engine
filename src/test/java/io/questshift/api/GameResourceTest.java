@@ -56,13 +56,18 @@ class GameResourceTest {
         assertEquals("devops-dungeon", session.get("campaignId"));
         assertEquals("room-01-broken-shell", session.get("currentRoomId"));
         assertEquals("active", session.get("status"));
+        assertEquals("Ada", session.get("turnName"));
         String narrative = String.valueOf(session.get("lastNarrative"));
         assertTrue(narrative.contains("Torchlight"), narrative);
+        assertTrue(narrative.contains("Ada, the floor is yours."), narrative);
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> gmLog = (List<Map<String, Object>>) session.get("gmLog");
         assertEquals(1, gmLog.size());
         assertEquals("room-01-broken-shell", gmLog.getFirst().get("roomId"));
         assertTrue(String.valueOf(gmLog.getFirst().get("narrative")).contains("Torchlight"));
+        assertTrue(
+                String.valueOf(gmLog.getFirst().get("narrative"))
+                        .contains("Ada, the floor is yours."));
         assertFalse(gmLog.getFirst().containsKey("name"));
         assertEquals(Boolean.TRUE, session.get("yamlFallback"));
         assertNotNull(session.get("id"));
@@ -297,13 +302,16 @@ class GameResourceTest {
                 .then()
                 .statusCode(200)
                 .body("partyMembers.name", hasItem("Linus"))
-                .body("partyMembers.name", not(hasItem("Ada")));
+                .body("partyMembers.name", not(hasItem("Ada")))
+                .body("turnName", equalTo("Linus"))
+                .body("lastNarrative", containsString("Linus, the floor is yours."));
         given().queryParam("name", "Nobody")
                 .when()
                 .delete("/api/sessions/" + joinCode + "/party")
                 .then()
                 .statusCode(200)
-                .body("partyMembers.name", hasItem("Linus"));
+                .body("partyMembers.name", hasItem("Linus"))
+                .body("turnName", equalTo("Linus"));
         given().when()
                 .delete("/api/sessions/" + joinCode + "/party")
                 .then()
@@ -412,11 +420,26 @@ class GameResourceTest {
                         .post("/api/sessions")
                         .then()
                         .statusCode(200)
+                        .body("turnName", equalTo("Ada"))
                         .body("gmLog.size()", equalTo(1))
                         .body("gmLog[0].roomId", equalTo("room-01-broken-shell"))
                         .body("gmLog[0].narrative", containsString("Torchlight"))
+                        .body("gmLog[0].narrative", containsString("Ada, the floor is yours."))
                         .extract()
                         .path("id");
+        given().contentType(ContentType.JSON)
+                .body("{\"command\":\"Hello\",\"seatId\":\"automancer\",\"name\":\"Linus\"}")
+                .when()
+                .post("/api/sessions/" + sessionId + "/commands")
+                .then()
+                .statusCode(409)
+                .body("error", equalTo("not_your_turn"));
+        given().when()
+                .get("/api/sessions/" + sessionId)
+                .then()
+                .statusCode(200)
+                .body("commandLog.size()", equalTo(0))
+                .body("turnName", equalTo("Ada"));
         given().contentType(ContentType.JSON)
                 .body("{\"command\":\"Hello\",\"seatId\":\"guardian\",\"name\":\"Ada\"}")
                 .when()
@@ -424,7 +447,11 @@ class GameResourceTest {
                 .then()
                 .statusCode(200)
                 .body("session.commandLog[0].name", equalTo("Ada"))
-                .body("session.commandLog[0].narrative", containsString("Nothing happens"));
+                .body("session.commandLog[0].narrative", containsString("Nothing happens"))
+                .body(
+                        "session.commandLog[0].narrative",
+                        containsString("Linus, the floor is yours."))
+                .body("session.turnName", equalTo("Linus"));
         given().contentType(ContentType.JSON)
                 .body("{\"command\":\"THORN\",\"seatId\":\"automancer\",\"name\":\"Linus\"}")
                 .when()
@@ -433,15 +460,9 @@ class GameResourceTest {
                 .statusCode(200)
                 .body("session.commandLog[1].name", equalTo("Linus"))
                 .body("session.commandLog[1].narrative", containsString("filesystem"))
+                .body("session.commandLog[1].narrative", containsString("Ada, the floor is yours."))
+                .body("session.turnName", equalTo("Ada"))
                 .body("session.gmLog.size()", equalTo(1));
-        given().contentType(ContentType.JSON)
-                .body("{\"command\":\"ls\",\"seatId\":\"guardian\"}")
-                .when()
-                .post("/api/sessions/" + sessionId + "/commands")
-                .then()
-                .statusCode(200)
-                .body("session.commandLog[2].name", equalTo("Ada"))
-                .body("session.commandLog[2].narrative", containsString("Nothing happens"));
         given().contentType(ContentType.JSON)
                 .body(
                         "{\"command\":\"grep -i rune /var/log/quest.log | awk '{print $NF}'\","
@@ -452,13 +473,18 @@ class GameResourceTest {
                 .statusCode(200)
                 .body("passed", equalTo(true))
                 .body("session.currentRoomId", equalTo("room-02-playbook-of-binding"))
-                .body("session.commandLog[3].roomId", equalTo("room-01-broken-shell"))
-                .body("session.commandLog[3].name", equalTo("Ada"))
-                .body("session.commandLog[3].narrative", containsString("The golem cracks"))
-                .body("session.commandLog[3].narrative", not(containsString("bound familiar")))
+                .body("session.turnName", equalTo("Linus"))
+                .body("session.commandLog[2].roomId", equalTo("room-01-broken-shell"))
+                .body("session.commandLog[2].name", equalTo("Ada"))
+                .body("session.commandLog[2].narrative", containsString("The golem cracks"))
+                .body(
+                        "session.commandLog[2].narrative",
+                        containsString("Linus, the floor is yours."))
+                .body("session.commandLog[2].narrative", not(containsString("bound familiar")))
                 .body("session.gmLog.size()", equalTo(2))
                 .body("session.gmLog[1].roomId", equalTo("room-02-playbook-of-binding"))
-                .body("session.gmLog[1].narrative", containsString("bound familiar"));
+                .body("session.gmLog[1].narrative", containsString("bound familiar"))
+                .body("session.gmLog[1].narrative", containsString("Linus, the floor is yours."));
 
         String yaml =
                 given().when()
@@ -467,6 +493,8 @@ class GameResourceTest {
                         .statusCode(200)
                         .extract()
                         .asString();
+        assertTrue(yaml.contains("turnName"), yaml);
+        assertTrue(yaml.contains("Linus"), yaml);
         assertTrue(yaml.contains("name: Ada") || yaml.contains("name: \"Ada\""), yaml);
         assertTrue(yaml.contains("The golem cracks"), yaml);
 
@@ -478,6 +506,7 @@ class GameResourceTest {
                         .post("/api/sessions/import")
                         .then()
                         .statusCode(200)
+                        .body("turnName", equalTo("Linus"))
                         .extract()
                         .as(Map.class);
         @SuppressWarnings("unchecked")
@@ -485,8 +514,8 @@ class GameResourceTest {
         assertEquals("Ada", log.get(0).get("name"));
         assertEquals("Linus", log.get(1).get("name"));
         assertTrue(String.valueOf(log.get(1).get("narrative")).contains("filesystem"));
-        assertTrue(String.valueOf(log.get(3).get("narrative")).contains("The golem cracks"));
-        assertFalse(String.valueOf(log.get(3).get("narrative")).contains("bound familiar"));
+        assertTrue(String.valueOf(log.get(2).get("narrative")).contains("The golem cracks"));
+        assertFalse(String.valueOf(log.get(2).get("narrative")).contains("bound familiar"));
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> scenes = (List<Map<String, Object>>) restored.get("gmLog");
         assertEquals(2, scenes.size());

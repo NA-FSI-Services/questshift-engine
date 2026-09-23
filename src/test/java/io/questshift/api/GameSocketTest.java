@@ -124,8 +124,13 @@ class GameSocketTest {
         assertTrue(replied.await(5, TimeUnit.SECONDS), last.get());
         assertTrue(last.get().contains(sessionId), last.get());
         assertTrue(last.get().contains("room-01-broken-shell"), last.get());
-        assertTrue(last.get().contains("commandLog"), last.get());
-        assertTrue(last.get().contains("cat /var/log/quest.log"), last.get());
+        assertTrue(last.get().contains("turnName"), last.get());
+        assertFalse(last.get().contains("cat /var/log/quest.log"), last.get());
+        given().when()
+                .get("/api/sessions/" + sessionId)
+                .then()
+                .statusCode(200)
+                .body("commandLog.size()", equalTo(0));
     }
 
     @Test
@@ -167,7 +172,9 @@ class GameSocketTest {
 
         first.socket.sendText("cat /var/log/quest.log", true);
         assertTrue(first.command.await(5, TimeUnit.SECONDS), first.last.get());
-        assertTrue(first.last.get().contains("cat /var/log/quest.log"), first.last.get());
+        assertFalse(
+                first.last.get().contains("cat /var/log/quest.log"),
+                "shared WS frames must not score");
         assertFalse(
                 second.command.await(400, TimeUnit.MILLISECONDS),
                 "command frames stay on the sender; presence fan-out must not change that");

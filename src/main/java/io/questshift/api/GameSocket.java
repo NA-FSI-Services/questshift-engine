@@ -1,5 +1,6 @@
 package io.questshift.api;
 
+import io.questshift.session.PartyConflictException;
 import io.questshift.session.SessionService;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.websocket.OnClose;
@@ -48,7 +49,11 @@ public class GameSocket {
     @OnMessage
     public void onMessage(
             String command, Session socket, @PathParam("sessionId") String sessionId) {
-        sessions().submit(sessionId, command, "shared", "");
+        try {
+            sessions().submit(sessionId, command, "shared", "");
+        } catch (PartyConflictException ignored) {
+            // Seat shared / blank name never holds the floor — return the snapshot unchanged.
+        }
         fanOut().send(socket, sessions().export(sessionId, "json"));
     }
 }

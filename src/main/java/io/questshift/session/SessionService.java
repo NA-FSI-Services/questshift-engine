@@ -58,11 +58,12 @@ public class SessionService {
             session.startedAt = Instant.now();
             session.currentRoomId = first.id;
             session.partyMembers = PartyRules.requireOpeningParty(party);
+            session.turnName = TurnRules.openingHolder(session.partyMembers);
             spawnParty(session, first);
             campaign.rooms.forEach(room -> session.puzzleCompletion.put(room.id, false));
             GameMasterTurn turn = llm.narrate(campaign, session, first, campaign.story.opening);
             applyTurn(session, turn);
-            recordScene(session, first.id, turn.narrative);
+            announceFloor(session, first.id, turn.narrative, true);
             index(session);
             return session;
         } finally {
@@ -107,8 +108,10 @@ public class SessionService {
                 throw new PartyInvalidException("Alias is required.");
             }
             String key = PartyRules.normalizeAlias(name);
+            List<GameSession.PartyMember> before = new ArrayList<>(session.partyMembers);
             List<GameSession.PartyMember> members = new ArrayList<>();
             boolean found = false;
+            boolean heldFloor = TurnRules.holdsFloor(session, name);
             for (GameSession.PartyMember existing : session.partyMembers) {
                 if (key.equals(PartyRules.normalizeAlias(existing.name))) {
                     found = true;
@@ -118,6 +121,15 @@ public class SessionService {
             }
             if (found) {
                 session.partyMembers = members;
+                if (heldFloor) {
+                    session.turnName = TurnRules.afterLeave(before, members, name);
+                    if (!session.turnName.isBlank() && "active".equals(session.status)) {
+                        String grant = TurnRules.grantLine(session.turnName);
+                        session.lastNarrative =
+                                TurnRules.withGrant(session.lastNarrative, session.turnName);
+                        recordScene(session, session.currentRoomId, grant);
+                    }
+                }
             }
             return session;
         } finally {
@@ -149,94 +161,121 @@ public class SessionService {
     }
 
     public CommandResult submit(String sessionId, String command, String seatId, String name) {
-        GameSession session = get(sessionId);
-        if (!"active".equals(session.status)) {
-            throw new PartyConflictException("party_not_active", "This hour is no longer active.");
-        }
-        Campaign campaign = campaigns.require(session.campaignId);
-        Campaign.Room room = campaign.roomById(session.currentRoomId);
-        CommandEvaluator.Evaluation evaluation = evaluator.evaluate(session, room, command);
-        CommandResult result = new CommandResult();
-        result.passed = evaluation.passed();
-        result.message = evaluation.message();
-        result.seatId = seatId;
-        result.command = command;
-        GameSession.CommandLogEntry entry =
-                recordCommand(
-                        session, name, seatId, command, evaluation.passed(), evaluation.message());
-        String speaker = entry == null ? resolveAlias(session, name, seatId) : entry.name;
-        if (evaluation.passed()) {
-            session.puzzleCompletion.put(room.id, true);
-            if (room.loot != null) {
-                room.loot.forEach(
-                        loot -> {
-                            if (!session.inventory.contains(loot.id)) {
-                                session.inventory.add(loot.id);
-                            }
-                        });
+        partyLock.lock();
+        try {
+            GameSession session = get(sessionId);
+            if (!"active".equals(session.status)) {
+                throw new PartyConflictException(
+                        "party_not_active", "This hour is no longer active.");
             }
-            if (room.skillsGranted != null) {
-                room.skillsGranted.forEach(
-                        skill -> {
-                            if (!session.skills.contains(skill)) {
-                                session.skills.add(skill);
-                            }
-                        });
+            String speaker = resolveAlias(session, name, seatId);
+            if (!TurnRules.holdsFloor(session, speaker)) {
+                throw new PartyConflictException(
+                        "not_your_turn",
+                        session.turnName == null || session.turnName.isBlank()
+                                ? "The Game Master has not granted the floor."
+                                : session.turnName + " has the floor.");
             }
-            session.lastCanvasEvent = room.canvasEvent;
-            Campaign.Room next = campaign.nextRoom(room.id);
-            if (next == null) {
-                session.status = "complete";
-                session.currentRoomId = room.id;
-                session.adventureSummary = AdventureSummarizer.summarize(campaign, session);
-                GameMasterTurn turn =
-                        llm.narrateAttempt(
-                                campaign,
-                                session,
-                                room,
-                                room.successNarrative,
-                                command,
-                                true,
-                                LLMService.firstAcceptedExample(room),
-                                speaker);
-                applyTurn(session, turn);
-                stampNarrative(entry, turn.narrative);
-            } else {
-                // The winning row keeps an addressed success reply. The next
-                // room's opening is a scene beat and is not that player's question.
-                stampNarrative(entry, addressedSuccess(room, evaluation.message()));
-                session.currentRoomId = next.id;
-                GameMasterTurn turn =
-                        llm.narrate(campaign, session, next, previousRoomSceneExtra(room));
-                applyTurn(session, turn);
-                recordScene(session, next.id, turn.narrative);
+            Campaign campaign = campaigns.require(session.campaignId);
+            Campaign.Room room = campaign.roomById(session.currentRoomId);
+            CommandEvaluator.Evaluation evaluation = evaluator.evaluate(session, room, command);
+            CommandResult result = new CommandResult();
+            result.passed = evaluation.passed();
+            result.message = evaluation.message();
+            result.seatId = seatId;
+            result.command = command;
+            GameSession.CommandLogEntry entry =
+                    recordCommand(
+                            session,
+                            speaker,
+                            seatId,
+                            command,
+                            evaluation.passed(),
+                            evaluation.message());
+            if (evaluation.passed()) {
+                session.puzzleCompletion.put(room.id, true);
+                if (room.loot != null) {
+                    room.loot.forEach(
+                            loot -> {
+                                if (!session.inventory.contains(loot.id)) {
+                                    session.inventory.add(loot.id);
+                                }
+                            });
+                }
+                if (room.skillsGranted != null) {
+                    room.skillsGranted.forEach(
+                            skill -> {
+                                if (!session.skills.contains(skill)) {
+                                    session.skills.add(skill);
+                                }
+                            });
+                }
+                session.lastCanvasEvent = room.canvasEvent;
+                Campaign.Room next = campaign.nextRoom(room.id);
+                if (next == null) {
+                    session.status = "complete";
+                    session.currentRoomId = room.id;
+                    session.adventureSummary = AdventureSummarizer.summarize(campaign, session);
+                    GameMasterTurn turn =
+                            llm.narrateAttempt(
+                                    campaign,
+                                    session,
+                                    room,
+                                    room.successNarrative,
+                                    command,
+                                    true,
+                                    LLMService.firstAcceptedExample(room),
+                                    speaker);
+                    applyTurn(session, turn);
+                    stampNarrative(entry, turn.narrative);
+                    // Floor freezes on complete; do not rotate.
+                } else {
+                    // The winning row keeps an addressed success reply. The next
+                    // room's opening is a scene beat and is not that player's question.
+                    stampNarrative(entry, addressedSuccess(room, evaluation.message()));
+                    session.turnName = TurnRules.rotate(session);
+                    if (entry != null) {
+                        entry.narrative = TurnRules.withGrant(entry.narrative, session.turnName);
+                    }
+                    session.currentRoomId = next.id;
+                    GameMasterTurn turn =
+                            llm.narrate(campaign, session, next, previousRoomSceneExtra(room));
+                    applyTurn(session, turn);
+                    String scene = TurnRules.withGrant(turn.narrative, session.turnName);
+                    session.lastNarrative = scene;
+                    recordScene(session, next.id, scene);
+                }
+                result.session = session;
+                return result;
             }
+            session.hintCount++;
+            if (evaluation.authoredMiss()) {
+                session.lastNarrative = evaluation.message();
+                session.lastHint = evaluation.message();
+                session.lastCanvasEvent = "focus_room";
+                stampNarrative(entry, evaluation.message());
+                rotateAndAnnounceOnEntry(session, entry);
+                result.session = session;
+                return result;
+            }
+            GameMasterTurn miss =
+                    llm.narrateAttempt(
+                            campaign,
+                            session,
+                            room,
+                            evaluation.message(),
+                            command,
+                            false,
+                            LLMService.firstAcceptedExample(room),
+                            speaker);
+            applyTurn(session, miss);
+            stampNarrative(entry, miss.narrative);
+            rotateAndAnnounceOnEntry(session, entry);
             result.session = session;
             return result;
+        } finally {
+            partyLock.unlock();
         }
-        session.hintCount++;
-        if (evaluation.authoredMiss()) {
-            session.lastNarrative = evaluation.message();
-            session.lastHint = evaluation.message();
-            session.lastCanvasEvent = "focus_room";
-            stampNarrative(entry, evaluation.message());
-            result.session = session;
-            return result;
-        }
-        GameMasterTurn miss =
-                llm.narrateAttempt(
-                        campaign,
-                        session,
-                        room,
-                        evaluation.message(),
-                        command,
-                        false,
-                        LLMService.firstAcceptedExample(room),
-                        speaker);
-        applyTurn(session, miss);
-        stampNarrative(entry, miss.narrative);
-        result.session = session;
-        return result;
     }
 
     public GameSession restore(GameSession imported) {
@@ -273,6 +312,7 @@ public class SessionService {
                 }
             }
             refreshStatus(imported);
+            imported.turnName = TurnRules.restore(imported);
             Set<String> taken = occupiedJoinCodesExcluding(imported.id);
             String wanted = JoinCodes.normalize(imported.joinCode);
             if (!JoinCodes.isJoinCode(wanted) || taken.contains(wanted)) {
@@ -484,6 +524,30 @@ public class SessionService {
         List<GameSession.GmLogEntry> log = new ArrayList<>(session.gmLog);
         log.add(beat);
         session.gmLog = log;
+    }
+
+    private static void rotateAndAnnounceOnEntry(
+            GameSession session, GameSession.CommandLogEntry entry) {
+        if (!"active".equals(session.status)) {
+            return;
+        }
+        session.turnName = TurnRules.rotate(session);
+        String granted =
+                TurnRules.withGrant(
+                        entry == null ? session.lastNarrative : entry.narrative, session.turnName);
+        if (entry != null) {
+            entry.narrative = granted;
+        }
+        session.lastNarrative = granted;
+    }
+
+    private static void announceFloor(
+            GameSession session, String roomId, String narrative, boolean asScene) {
+        String granted = TurnRules.withGrant(narrative, session.turnName);
+        session.lastNarrative = granted;
+        if (asScene) {
+            recordScene(session, roomId, granted);
+        }
     }
 
     private static String addressedSuccess(Campaign.Room room, String evaluatorMessage) {

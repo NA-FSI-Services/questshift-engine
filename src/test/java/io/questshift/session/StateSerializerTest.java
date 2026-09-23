@@ -21,6 +21,7 @@ class StateSerializerTest {
         session.puzzleCompletion.put("room-01-broken-shell", true);
         session.yamlFallback = true;
         session.joinCode = "thorn-golem";
+        session.turnName = "Ada";
         GameSession.CommandLogEntry attempt = new GameSession.CommandLogEntry();
         attempt.roomId = "room-01-broken-shell";
         attempt.name = "Ada";
@@ -56,6 +57,7 @@ class StateSerializerTest {
         assertEquals(Boolean.TRUE, restored.puzzleCompletion.get("room-01-broken-shell"));
         assertTrue(restored.yamlFallback);
         assertEquals("thorn-golem", restored.joinCode);
+        assertEquals("Ada", restored.turnName);
         assertEquals(1, restored.commandLog.size());
         assertEquals("Ada", restored.commandLog.getFirst().name);
         assertEquals("cat /var/log/quest.log", restored.commandLog.getFirst().command);

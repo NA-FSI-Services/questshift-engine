@@ -24,6 +24,10 @@ public class GameSession {
     public String lastNarrative;
     public String lastHint;
     public String lastCanvasEvent;
+
+    /** Alias who may type a command. Engine-owned; join order, not seat. */
+    public String turnName;
+
     public List<CommandLogEntry> commandLog = new ArrayList<>();
 
     /** Room-addressed scene beats (Start, next-room opening). No player alias. */
