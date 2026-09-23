@@ -18,6 +18,8 @@ class CampaignLibraryTest {
         assertEquals("devops-dungeon", library.defaultCampaign().metadata.id);
         assertFalse(library.all().isEmpty());
         assertEquals("devops-dungeon", library.require("devops-dungeon").metadata.id);
+        assertEquals("ansible-bastion", library.require("ansible-bastion").metadata.id);
+        assertEquals(2, library.all().stream().map(c -> c.metadata.id).distinct().count());
         assertEquals("guardian_shell", library.defaultCampaign().rooms.get(0).guardian.sprite);
         assertEquals("lobby-hour", library.defaultCampaign().story.clues.get(0).id);
         assertEquals(
@@ -26,6 +28,7 @@ class CampaignLibraryTest {
                         .map(room -> room.guardian.sprite)
                         .distinct()
                         .count());
+        assertEquals("ansible", library.require("ansible-bastion").rooms.get(0).puzzleType);
     }
 
     @Test
