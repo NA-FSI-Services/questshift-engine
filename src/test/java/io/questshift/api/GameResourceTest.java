@@ -154,22 +154,82 @@ class GameResourceTest {
     }
 
     @Test
-    void listCampaignsIncludesDevopsDungeon() {
+    void listCampaignsIncludesBothShippedCards() {
         given().when()
                 .get("/api/campaigns")
                 .then()
                 .statusCode(200)
-                .body("metadata.id", hasItem("devops-dungeon"))
-                .body("[0].rooms[0].clues.id", hasItem("shell-log"))
-                .body("[0].story.clues.id", hasItem("lobby-hour"))
+                .body("metadata.id", hasItems("devops-dungeon", "ansible-bastion"))
                 .body(
-                        "[0].rooms.guardian.sprite",
+                        "find { it.metadata.id == 'devops-dungeon' }.rooms[0].clues.id",
+                        hasItem("shell-log"))
+                .body(
+                        "find { it.metadata.id == 'devops-dungeon' }.story.clues.id",
+                        hasItem("lobby-hour"))
+                .body(
+                        "find { it.metadata.id == 'devops-dungeon' }.rooms.guardian.sprite",
                         hasItems(
                                 "guardian_shell",
                                 "guardian_playbook",
                                 "guardian_pod",
                                 "guardian_servlet",
-                                "guardian_throne"));
+                                "guardian_throne"))
+                .body(
+                        "find { it.metadata.id == 'ansible-bastion' }.rooms[0].id",
+                        equalTo("room-01-couriers-vault"))
+                .body(
+                        "find { it.metadata.id == 'ansible-bastion' }.rooms.puzzle_type",
+                        hasItem("ansible"));
+    }
+
+    @Test
+    void ansibleBastionAcceptedExamplesClearTheHour() throws Exception {
+        Campaign campaign = loadCampaign("campaigns/campaign-ansible-bastion.yaml");
+        String sessionId =
+                given().contentType(ContentType.JSON)
+                        .body(
+                                "{\"campaignId\":\"ansible-bastion\",\"party\":[{\"name\":\"Ada\",\"seatId\":\"automancer\"}]}")
+                        .when()
+                        .post("/api/sessions")
+                        .then()
+                        .statusCode(200)
+                        .body("campaignId", equalTo("ansible-bastion"))
+                        .body("currentRoomId", equalTo("room-01-couriers-vault"))
+                        .extract()
+                        .path("id");
+
+        for (Campaign.Room room :
+                campaign.rooms.stream()
+                        .sorted((a, b) -> Integer.compare(a.order, b.order))
+                        .toList()) {
+            String example = room.acceptedExamples.getFirst();
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("command", example);
+            body.put("seatId", "automancer");
+            given().contentType(ContentType.JSON)
+                    .body(body)
+                    .when()
+                    .post("/api/sessions/" + sessionId + "/commands")
+                    .then()
+                    .statusCode(200)
+                    .body("passed", equalTo(true));
+        }
+
+        given().when()
+                .get("/api/sessions/" + sessionId)
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("complete"))
+                .body(
+                        "inventory",
+                        hasItems(
+                                "rune-quill",
+                                "rune-lamp",
+                                "rune-gate",
+                                "rune-sigil",
+                                "controller-aether"))
+                .body("puzzleCompletion.room-01-couriers-vault", equalTo(true))
+                .body("puzzleCompletion.room-05-controllers-throne", equalTo(true));
     }
 
     @Test
@@ -828,11 +888,13 @@ class GameResourceTest {
     }
 
     private static Campaign loadCampaign() throws Exception {
+        return loadCampaign("campaigns/campaign-devops-dungeon.yaml");
+    }
+
+    private static Campaign loadCampaign(String resource) throws Exception {
         try (InputStream in =
-                Thread.currentThread()
-                        .getContextClassLoader()
-                        .getResourceAsStream("campaigns/campaign-devops-dungeon.yaml")) {
-            assertNotNull(in, "classpath campaign missing");
+                Thread.currentThread().getContextClassLoader().getResourceAsStream(resource)) {
+            assertNotNull(in, "classpath campaign missing: " + resource);
             return new ObjectMapper(new YAMLFactory()).readValue(in, Campaign.class);
         }
     }

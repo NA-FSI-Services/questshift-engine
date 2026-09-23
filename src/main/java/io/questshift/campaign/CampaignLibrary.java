@@ -69,6 +69,7 @@ public class CampaignLibrary {
             }
             if (campaigns.isEmpty()) {
                 loadClasspath("campaigns/campaign-devops-dungeon.yaml");
+                loadClasspath("campaigns/campaign-ansible-bastion.yaml");
             }
             LOG.infof("Loaded %d campaign(s)", campaigns.size());
         } finally {
